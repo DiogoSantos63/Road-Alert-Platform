@@ -17,6 +17,7 @@ typedef struct {
 	HANDLE hTimer;
 	MSG_ALERTA alertaAtual;
 	CRITICAL_SECTION cs;
+	HANDLE hThreads[2];
 } PLACAR;
 
 BOOL validarArgumentos(PLACAR* placar, int argc, TCHAR* argv[]);
@@ -27,7 +28,7 @@ BOOL escreverRegistry(TCHAR* nomePipe);
 
 BOOL lerAlertaRegistry(TCHAR* nomePipe, MSG_ALERTA* alerta);
 
-BOOL initThreads(HANDLE* hThreads[], PLACAR* placar);
+BOOL initThreads(PLACAR* placar);
 
 BOOL initEventos(PLACAR* placar);
 
@@ -45,6 +46,6 @@ void mostrarHora();
 
 void initTimer(HANDLE hTimer, DWORD duracao);
 
-void encerrarPlacar(HANDLE hThreads[], PLACAR* placar);
+void encerrarPlacar(PLACAR* placar);
 
 #endif

@@ -21,7 +21,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 #endif  
 
 	PLACAR placar = { 0 };
-	HANDLE hThreads[2];
+    // HANDLE hThreads[2];
 
 	if (!validarArgumentos(&placar, argc, argv)) {
 		return 1;
@@ -33,13 +33,13 @@ int _tmain(int argc, TCHAR* argv[]) {
 		return 1;
 	}
 
-	if (!initThreads(&hThreads, &placar)) {
+	if (!initThreads(&placar)) {
 		return 1;
 	}
 
-	WaitForMultipleObjects(2, hThreads, TRUE, INFINITE);
+	WaitForMultipleObjects(2, placar.hThreads, TRUE, INFINITE);
 
-	encerrarPlacar(&hThreads, &placar);
+	encerrarPlacar(&placar);
 
 	return 0;
 }
@@ -109,11 +109,11 @@ BOOL escreverRegistry(TCHAR* nomePipe) {
 	return result == ERROR_SUCCESS;
 }
 
-BOOL initThreads(HANDLE hThreads[], PLACAR* placar) {
-	hThreads[0] = CreateThread(NULL, 0, threadComandos, placar, 0, NULL);
-	hThreads[1] = CreateThread(NULL, 0, threadAlertas, placar, 0, NULL);
+BOOL initThreads(PLACAR* placar) {
+	placar->hThreads[0] = CreateThread(NULL, 0, threadComandos, placar, 0, NULL);
+	placar->hThreads[1] = CreateThread(NULL, 0, threadAlertas, placar, 0, NULL);
 
-	if (hThreads[0] == NULL || hThreads[1] == NULL) {
+	if (placar->hThreads[0] == NULL || placar->hThreads[1] == NULL) {
 		_tprintf(STR_ERRO_CRIAR_THREADS);
 		return FALSE;
 	}
@@ -188,8 +188,7 @@ DWORD WINAPI threadAlertas(LPVOID param) {
 	while (!placar->terminar) {
 		// --- 1. espera alerta ou terminar ---
 		result = WaitForMultipleObjects(2, eventos, FALSE, INFINITE);
-
-		if (result == WAIT_OBJECT_0 + 1 || placar->terminar) {
+		if (result == WAIT_OBJECT_0 + 1) {
           break;
         }
 
@@ -213,8 +212,7 @@ DWORD WINAPI threadAlertas(LPVOID param) {
 
 		// --- 5. espera alerta, terminar ou timer ---
 		result = WaitForMultipleObjects(3, eventos, FALSE, INFINITE);
-
-		if (result == WAIT_OBJECT_0 + 1 || placar->terminar) {
+		if (result == WAIT_OBJECT_0 + 1) {
           break;
         }
 
@@ -222,7 +220,7 @@ DWORD WINAPI threadAlertas(LPVOID param) {
 		if (result == WAIT_OBJECT_0 + 2) {
 			EnterCriticalSection(&placar->cs);
 			mostrarHora();
-			_tprintf(STR_ALERTA_FIM _T("\n"));
+			_tprintf(STR_ALERTA_FIM);
 			_tprintf(STR_CMD_INPUT);
 			LeaveCriticalSection(&placar->cs);
 		}
@@ -293,9 +291,9 @@ void desligarPlacar(PLACAR* placar) {
 	_tprintf(STR_PLACAR_ENCERRAR);
 }
 
-void encerrarPlacar(HANDLE* hThreads[], PLACAR* placar) {
-	CloseHandle(hThreads[0]);
-	CloseHandle(hThreads[1]);
+void encerrarPlacar(PLACAR* placar) {
+	CloseHandle(placar->hThreads[0]);
+	CloseHandle(placar->hThreads[1]);
 	CloseHandle(placar->hEventoNotificar);
 	CloseHandle(placar->hEventoTerminar);
 

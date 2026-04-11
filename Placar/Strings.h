@@ -9,7 +9,7 @@
 #define STR_PLACAR_ID _T("Identificador = %lu\n")
 #define STR_DATA_HORA _T("\n%02d/%02d/%04d (%02d:%02d:%02d): ")
 #define STR_ALERTA _T("'%s' (%d segundos)\n")
-#define STR_ALERTA_FIM _T("'---'")
+#define STR_ALERTA_FIM _T("'---'\n")
 
 // Avisos 
 #define STR_PLACAR_LIGADO _T("Placar já ligado.\n")
