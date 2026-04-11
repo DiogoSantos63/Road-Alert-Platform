@@ -172,8 +172,6 @@ COMANDO parsearComando(TCHAR* cmd) {
 DWORD WINAPI threadAlertas(LPVOID param) {
 	PLACAR* placar = (PLACAR*)param;
 	MSG_ALERTA alerta = { 0 };
-
-	HANDLE eventos[2];
 	DWORD result;
 
 	placar->hTimer = CreateWaitableTimer(NULL, TRUE, NULL);
@@ -182,55 +180,63 @@ DWORD WINAPI threadAlertas(LPVOID param) {
 		return 1;
 	}
 
-	eventos[1] = placar->hEventoTerminar;
+	HANDLE eventosEspera[2] = { 
+		placar->hEventoNotificar, 
+		placar->hEventoTerminar 
+	};
+	HANDLE eventosTimer[3] = {
+		placar->hTimer, 
+		placar->hEventoTerminar, 
+		placar->hEventoNotificar 
+	};
 
 	while (!placar->terminar) {
 
-		// espera notificar ou terminar
-		eventos[0] = placar->hEventoNotificar;
-		result = WaitForMultipleObjects(2, eventos, FALSE, INFINITE);
+		// --- 1. espera novo alerta ou terminar ---
+		eventosEspera[0] = placar->hEventoNotificar;
+		result = WaitForMultipleObjects(2, eventosEspera, FALSE, INFINITE);
 
-		if (result == WAIT_OBJECT_0 + 1 || placar->terminar)
-			break;
+		if (result == WAIT_OBJECT_0 + 1 || placar->terminar) break;
 
-		// lê alerta do registry
+		// --- 2. lê alerta do registry ---
 		if (!lerAlertaRegistry(placar->nomePipe, &alerta)) {
 			_tprintf(STR_ERRO_ALERTA_REGISTRY);
 			ResetEvent(placar->hEventoNotificar);
 			continue;
 		}
-
 		ResetEvent(placar->hEventoNotificar);
 
-		// mostra alerta
+		// --- 3. mostra alerta ---
 		EnterCriticalSection(&placar->cs);
 		mostrarHora();
 		_tprintf(STR_ALERTA, alerta.msg, alerta.duracao);
 		_tprintf(STR_CMD_INPUT);
 		LeaveCriticalSection(&placar->cs);
 
-		// inicia timer com duração do alerta
+		// --- 4. arma timer ---
 		initTimer(placar->hTimer, alerta.duracao);
 
-		// espera timer ou terminar
-		eventos[0] = placar->hTimer;
-		result = WaitForMultipleObjects(2, eventos, FALSE, INFINITE);
+		// --- 5. espera timer, terminar ou novo alerta ---
+		result = WaitForMultipleObjects(3, eventosTimer, FALSE, INFINITE);
 
-		if (result == WAIT_OBJECT_0 + 1 || placar->terminar)
-			break;
+		if (result == WAIT_OBJECT_0 + 1 || placar->terminar) break;
 
-		// timer disparou — alerta expirou
-		EnterCriticalSection(&placar->cs);
-		mostrarHora();
-		_tprintf(STR_ALERTA_FIM _T("\n"));
-		_tprintf(STR_CMD_INPUT);
-		LeaveCriticalSection(&placar->cs);
+		if (result == WAIT_OBJECT_0 + 0) {
+			// timer expirou normalmente
+			EnterCriticalSection(&placar->cs);
+			mostrarHora();
+			_tprintf(STR_ALERTA_FIM _T("\n"));
+			_tprintf(STR_CMD_INPUT);
+			LeaveCriticalSection(&placar->cs);
+		}
+
+		
+		CancelWaitableTimer(placar->hTimer);
 	}
 
 	CloseHandle(placar->hTimer);
 	placar->hTimer = NULL;
 	return 0;
-
 }
 
 BOOL lerAlertaRegistry(TCHAR* nomePipe, MSG_ALERTA* alerta) {
