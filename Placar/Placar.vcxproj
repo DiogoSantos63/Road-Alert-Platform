@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{5aacf73b-dd18-42e8-96e5-eb6c1705e56e}</ProjectGuid>
-    <RootNamespace>RoadAlertPlatform</RootNamespace>
+    <ProjectGuid>{76d5334a-f447-42f1-bc9f-b8721e39c654}</ProjectGuid>
+    <RootNamespace>Placar</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -127,7 +127,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Constantes.h" />
     <ClCompile Include="Placar.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Placar.h" />
+    <ClInclude Include="Strings.h" />
+    <ClInclude Include="Types.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
