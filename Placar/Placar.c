@@ -45,7 +45,6 @@ int _tmain(int argc, TCHAR* argv[]) {
 }
 
 BOOL validarArgumentos(PLACAR* placar, int argc, TCHAR* argv[]) {
-
 	if (argc > 1) {
 		lstrcpy(placar->nomePipe, argv[1]);
 
@@ -180,23 +179,19 @@ DWORD WINAPI threadAlertas(LPVOID param) {
 		return 1;
 	}
 
-	HANDLE eventosEspera[2] = { 
-		placar->hEventoNotificar, 
-		placar->hEventoTerminar 
-	};
-	HANDLE eventosTimer[3] = {
-		placar->hTimer, 
-		placar->hEventoTerminar, 
-		placar->hEventoNotificar 
+	HANDLE eventos[] = {
+	  placar->hEventoNotificar,
+	  placar->hEventoTerminar,
+	  placar->hTimer,
 	};
 
 	while (!placar->terminar) {
+		// --- 1. espera alerta ou terminar ---
+		result = WaitForMultipleObjects(2, eventos, FALSE, INFINITE);
 
-		// --- 1. espera novo alerta ou terminar ---
-		eventosEspera[0] = placar->hEventoNotificar;
-		result = WaitForMultipleObjects(2, eventosEspera, FALSE, INFINITE);
-
-		if (result == WAIT_OBJECT_0 + 1 || placar->terminar) break;
+		if (result == WAIT_OBJECT_0 + 1 || placar->terminar) {
+          break;
+        }
 
 		// --- 2. lê alerta do registry ---
 		if (!lerAlertaRegistry(placar->nomePipe, &alerta)) {
@@ -216,13 +211,15 @@ DWORD WINAPI threadAlertas(LPVOID param) {
 		// --- 4. arma timer ---
 		initTimer(placar->hTimer, alerta.duracao);
 
-		// --- 5. espera timer, terminar ou novo alerta ---
-		result = WaitForMultipleObjects(3, eventosTimer, FALSE, INFINITE);
+		// --- 5. espera alerta, terminar ou timer ---
+		result = WaitForMultipleObjects(3, eventos, FALSE, INFINITE);
 
-		if (result == WAIT_OBJECT_0 + 1 || placar->terminar) break;
+		if (result == WAIT_OBJECT_0 + 1 || placar->terminar) {
+          break;
+        }
 
-		if (result == WAIT_OBJECT_0 + 0) {
-			// timer expirou normalmente
+		// timer expirou normalmente
+		if (result == WAIT_OBJECT_0 + 2) {
 			EnterCriticalSection(&placar->cs);
 			mostrarHora();
 			_tprintf(STR_ALERTA_FIM _T("\n"));
@@ -230,9 +227,11 @@ DWORD WINAPI threadAlertas(LPVOID param) {
 			LeaveCriticalSection(&placar->cs);
 		}
 
-		
+
 		CancelWaitableTimer(placar->hTimer);
 	}
+
+    _tprintf(_T("EXITED"));
 
 	CloseHandle(placar->hTimer);
 	placar->hTimer = NULL;
