@@ -14,14 +14,13 @@
 
 
 int _tmain(int argc, TCHAR* argv[]) {
-
+// TODO: move this to a utils function, since we'll be using it for the other files probably
 #ifdef UNICODE 
 	_setmode(_fileno(stdin), _O_WTEXT);
 	_setmode(_fileno(stdout), _O_WTEXT);
 #endif  
 
 	PLACAR placar = { 0 };
-    // HANDLE hThreads[2];
 
 	if (!validarArgumentos(&placar, argc, argv)) {
 		return 1;
@@ -29,16 +28,12 @@ int _tmain(int argc, TCHAR* argv[]) {
 
 	InitializeCriticalSection(&placar.cs);
 
-	if (!initEventos(&placar)) {
-		return 1;
-	}
-
-	if (!initThreads(&placar)) {
+	if (!(initEventos(&placar) && initThreads(&placar))) {
+        encerrarPlacar(&placar);
 		return 1;
 	}
 
 	WaitForMultipleObjects(2, placar.hThreads, TRUE, INFINITE);
-
 	encerrarPlacar(&placar);
 
 	return 0;
@@ -51,8 +46,7 @@ BOOL validarArgumentos(PLACAR* placar, int argc, TCHAR* argv[]) {
 		if (!escreverRegistry(placar->nomePipe)) {
 			_tprintf(STR_REGISTRY_SAVE_ERROR);
 		}
-	}
-	else if (!lerRegistry(placar->nomePipe)) {
+	} else if (!lerRegistry(placar->nomePipe)) {
 		_tprintf(STR_REGISTRY_PIPE_NAME_NOT_FOUND);
 		return FALSE;
 	};
@@ -275,8 +269,7 @@ void ligarPlacar(PLACAR* placar) {
 	if (placar->ligado) {
 		_tprintf(STR_PLACAR_LIGADO);
 		return;
-	}
-	else {
+	} else {
 		srand((unsigned int)time(NULL));
 		placar->identificador = (rand() % 99) + 1;
 		placar->ligado = TRUE;
@@ -292,10 +285,10 @@ void desligarPlacar(PLACAR* placar) {
 }
 
 void encerrarPlacar(PLACAR* placar) {
-	CloseHandle(placar->hThreads[0]);
-	CloseHandle(placar->hThreads[1]);
-	CloseHandle(placar->hEventoNotificar);
-	CloseHandle(placar->hEventoTerminar);
+	if(placar->hThreads[0]) CloseHandle(placar->hThreads[0]);
+	if(placar->hThreads[1]) CloseHandle(placar->hThreads[1]);
+	if(placar->hEventoNotificar) CloseHandle(placar->hEventoNotificar);
+	if(placar->hEventoTerminar) CloseHandle(placar->hEventoTerminar);
 
 	DeleteCriticalSection(&placar->cs);
 }
