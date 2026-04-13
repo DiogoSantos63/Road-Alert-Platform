@@ -20,7 +20,7 @@
 #define STR_REGISTRY_PIPE_NAME_NOT_FOUND _T("[ERRO] O nome do 'NPIPE' não foi especificado (args ou registry)!\n")
 #define STR_COMANDO_DESCONHECIDO _T("[ERRO] Comando desconhecido!\n")
 #define STR_ERRO_CRIAR_TIMER _T("[ERRO] Criar o waitable timer.\n")
-#define STR_ERRO_ALERTA_REGISTRY _T("[ERRO] Ler alerta do registry!\n")
+#define STR_ERRO_ALERTA_REGISTRY _T("\n[ERRO] Ler alerta do registry!\n")
 #define STR_ERRO_CRIAR_THREADS _T("[ERRO] Criar threads.\n")
 #define STR_ERRO_CRIAR_EVENTOS _T("[ERRO] Criar eventos.\n")
 

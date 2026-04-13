@@ -191,7 +191,11 @@ DWORD WINAPI threadAlertas(LPVOID param) {
 
 	        MSG_ALERTA alerta = { 0 };
             if (!lerAlertaRegistry(placar->nomePipe, &alerta)) {
+			  EnterCriticalSection(&placar->cs);
+			  _tprintf(_T("\n"));
               _tprintf(STR_ERRO_ALERTA_REGISTRY);
+			  _tprintf(STR_CMD_INPUT);
+			  LeaveCriticalSection(&placar->cs);
               continue;
             }
 
