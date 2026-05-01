@@ -18,19 +18,13 @@
     <ClCompile Include="Placar.c">
       <Filter>Arquivos de Origem</Filter>
     </ClCompile>
-    <ClCompile Include="Constantes.h">
-      <Filter>Arquivos de Origem</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Types.h">
-      <Filter>Arquivos de Origem</Filter>
+    <ClInclude Include="Strings.h">
+      <Filter>Arquivos de Cabeçalho</Filter>
     </ClInclude>
     <ClInclude Include="Placar.h">
-      <Filter>Arquivos de Origem</Filter>
-    </ClInclude>
-    <ClInclude Include="Strings.h">
-      <Filter>Arquivos de Origem</Filter>
+      <Filter>Arquivos de Cabeçalho</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

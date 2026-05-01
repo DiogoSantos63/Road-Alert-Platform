@@ -8,9 +8,9 @@
 
 /*
 	Placar -> Central:
-	1 – ligar,
-	2 – desligar
-	3 – fim do alerta (duração)
+	1 - ligar,
+	2 - desligar
+	3 - fim do alerta (duraÃ§Ã£o)
 	5 - cancelar alerta
 	6 - encerrar plataforma
 */
@@ -20,7 +20,7 @@ typedef struct {
 
 /*
 	Central -> Placar:
-	3 – atribuir identificador
+	3 - atribuir identificador
 */
 typedef struct {
 	BYTE tipo;
@@ -29,7 +29,7 @@ typedef struct {
 
 /*
 	Central -> Placar:
-	4 – novo alerta
+	4 - novo alerta
 */
 typedef struct {
 	BYTE tipo;
@@ -48,7 +48,12 @@ typedef struct {
 typedef enum {
 	CMD_LIGAR,
 	CMD_DESLIGAR,
-	CMD_DESCONHECIDO
+	CMD_DESCONHECIDO,
+	CMD_ALERTA,
+	CMD_CANCELAR,
+	CMD_LISTAR,
+	CMD_ENCERRAR,
+	CMD_AJUDA
 } COMANDO;
 
 #endif

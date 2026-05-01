@@ -3,5 +3,11 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Folder Name="/Shared/">
+    <File Path="Shared/Constantes.h" />
+    <File Path="Shared/Types.h" />
+    <File Path="Shared/Utils.h" />
+  </Folder>
+  <Project Path="Central/Central.vcxproj" Id="547778a1-264e-4246-bb14-2351e7964941" />
   <Project Path="Placar/Placar.vcxproj" Id="76d5334a-f447-42f1-bc9f-b8721e39c654" />
 </Solution>

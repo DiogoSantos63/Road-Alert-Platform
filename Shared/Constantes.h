@@ -1,14 +1,15 @@
 #ifndef CONSTANTES_H
 #define CONSTANTES_H
 
-
 #define TAM_MSG 140
 
 #define TAM_CMD 64
 
-#define MAX_PLACARES 20
-
 #define TAM_NOME_PIPE 256
+
+#define TAM_INPUT 256
+
+#define MAX_PLACARES 20
 
 #define TICKS 10000000LL
 
@@ -17,6 +18,10 @@
 #define REGISTRY_VALUE_NPIPE _T("NPIPE")
 
 #define EVENTO_NOTIFICAR _T("notificar")
+
+#define CENTRAL_PIPE _T("\\\\.\\pipe\\")
+
+#define THREADS_CENTRAL 2
 
 #endif
 

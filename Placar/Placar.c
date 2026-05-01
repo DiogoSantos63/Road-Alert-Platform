@@ -1,6 +1,3 @@
-#define UNICODE
-#define _UNICODE
-
 #include <windows.h> 
 #include <tchar.h> 
 #include <io.h> 
@@ -11,14 +8,11 @@
 #include "Types.h"
 #include "Constantes.h"
 #include "Strings.h"
+#include "Utils.h"
 
 
 int _tmain(int argc, TCHAR* argv[]) {
-// TODO: move this to a utils function, since we'll be using it for the other files probably
-#ifdef UNICODE 
-	_setmode(_fileno(stdin), _O_WTEXT);
-	_setmode(_fileno(stdout), _O_WTEXT);
-#endif  
+	initConsola();
 
 	PLACAR placar = { 0 };
 	if (!validarArgumentos(&placar, argc, argv)) {
