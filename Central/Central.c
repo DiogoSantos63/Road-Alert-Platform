@@ -39,6 +39,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 }
 
 BOOL initCentral(CENTRAL* central) {
+	central->proximoId = 1;
 	central->hMutex = CreateMutex(NULL, FALSE, NULL);
 
 	if (central->hMutex == NULL) {
@@ -79,7 +80,7 @@ BOOL criarPipe(CENTRAL* central) {
 		PIPE_TYPE_MESSAGE |
 		PIPE_READMODE_MESSAGE |
 		PIPE_WAIT,
-		1,
+		MAX_PLACARES,
 		1024,
 		1024,
 		0,
@@ -146,21 +147,21 @@ DWORD WINAPI threadComandos(LPVOID param) {
 		case CMD_ALERTA:
 			if (args == NULL)
 				_tprintf(STR_CMD_ALERTA_ERRO);
-			enviarAlerta(central, args);
+			cmdEnviarAlerta(central, args);
 			break;
 		case CMD_CANCELAR:
 			if (args == NULL)
 				_tprintf(STR_CMD_ALERTA_ERRO);
-			cancelarAlerta(central, args);
+			cmdCancelarAlerta(central, args);
 			break;
 		case CMD_LISTAR:
-			listarPlacares(central);
+			cmdListarPlacares(central);
 			break;
 		case CMD_ENCERRAR:
-
+			cmdEncerrarCentral(central);
 			break;
 		case CMD_AJUDA:
-			listarComandos();
+			cmdListarComandos();
 			break;
 		case CMD_DESCONHECIDO:
 			_tprintf(STR_ERRO_COMANDO);
@@ -176,15 +177,103 @@ DWORD WINAPI threadPlacares(LPVOID param) {
 
 	while (!central->terminar) {
 		_tprintf(STR_WAITING_CONNECTION);
+		_tprintf(STR_CMD_INPUT);
 
-	
+		BOOL ligado = ConnectNamedPipe(central->hPipe, NULL);
+
+		if (!ligado && GetLastError() != ERROR_PIPE_CONNECTED) {
+			_tprintf(STR_ERRO_CONNECT_PIPE, GetLastError());
+			continue;
+		}
+
+		WaitForSingleObject(central->hMutex, INFINITE);
+
+		if (central->numPlacares >= MAX_PLACARES) {
+			ReleaseMutex(central->hMutex);
+			_tprintf(STR_ERRO_MAX_PLACARES);
+			DisconnectNamedPipe(central->hPipe);
+			continue;
+		}
+
+		int index = central->numPlacares;
+		central->placares[index].hPipe = central->hPipe;
+		central->placares[index].ligado = TRUE;
+		central->placares[index].id = 0;
+		central->numPlacares++;
+
+		ReleaseMutex(central->hMutex);
+
+		THREAD_PLACAR_ARGS* args = malloc(sizeof(THREAD_PLACAR_ARGS));
+		args->central = central;
+		args->index = index;
+
+		central->placares[index].hThread = CreateThread(
+			NULL, 
+			0, 
+			threadPlacar, 
+			args, 
+			0, 
+			NULL
+		);
+
+		central->hPipe = CreateNamedPipe(
+			central->nomePipe,
+			PIPE_ACCESS_DUPLEX,
+			PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+			MAX_PLACARES,
+			1024,
+			1024,
+			0,
+			NULL
+		);
+
+		if (central->hPipe == INVALID_HANDLE_VALUE) {
+			_tprintf(STR_NAMED_PIPE_CREATION, GetLastError());
+			break;
+		}
 	}
 
 	return 0;
 }
 
-BOOL enviarAlerta(CENTRAL* central) {
-	//TODO
+BOOL cmdEnviarAlerta(CENTRAL* central, TCHAR* args) {
+	TCHAR* ctx = NULL;
+	TCHAR* msg = _tcstok_s(args, _T(" "), &ctx);
+	TCHAR* sDuracao = _tcstok_s(NULL, _T(" "), &ctx);
+	TCHAR* sId = _tcstok_s(NULL, _T(" "), &ctx);
+
+	if (!msg || !sDuracao || !sId) {
+		_tprintf(STR_CMD_ALERTA_ERRO);
+		return FALSE;
+	}
+
+	DWORD duracao = (DWORD)_ttoi(sDuracao);
+	DWORD id = (DWORD)_ttoi(sId);
+
+	MSG_ALERTA alerta = { 0 };
+	alerta.tipo = 4;
+	alerta.duracao = duracao;
+	_tcscpy_s(alerta.msg, TAM_MSG, msg);
+
+	
+	if (id == 0)
+		enviarTodos(central, &alerta, sizeof(MSG_ALERTA));
+	else if (!enviarPlacar(central, id, &alerta, sizeof(MSG_ALERTA))) {
+		_tprintf(STR_PLACAR_NAO_ENCONTRADO, id);
+		return FALSE;
+	}
+
+	WaitForSingleObject(central->hMutex, INFINITE);
+
+	for (int i = 0; i < central->numPlacares; i++) {
+		if ((id == 0 || central->placares[i].id == id) && central->placares[i].ligado) {
+			central->placares[i].temAlerta = TRUE;
+			_tcscpy_s(central->placares[i].msgAlerta, TAM_MSG, msg);
+			central->placares[i].duracaoAlerta = duracao;
+		}
+	}
+	ReleaseMutex(central->hMutex);
+
 	return TRUE;
 }
 
@@ -237,12 +326,41 @@ void enviarTodos(CENTRAL* central, void* msg, int size) {
 	ReleaseMutex(central->hMutex);
 }
 
-BOOL cancelarAlerta(CENTRAL* central) {
-	//TODO
+BOOL cmdCancelarAlerta(CENTRAL* central, TCHAR* args) {
+	if (args == NULL) {
+		_tprintf(STR_CMD_CANCELAR_ERRO);
+		return FALSE;
+	}
+
+	DWORD id = (DWORD)_ttoi(args);
+
+	MSG_CMD msg = { 0 };
+	msg.tipo = 5;
+
+	if (id == 0) {
+		_tprintf(STR_CMD_CANCELAR_ERRO);
+		return FALSE;
+	}
+
+	if (!enviarPlacar(central, id, &msg, sizeof(MSG_CMD))) {
+		_tprintf(STR_PLACAR_NAO_ENCONTRADO, id);
+		return FALSE;
+	}
+
+	WaitForSingleObject(central->hMutex, INFINITE);
+	for (int i = 0; i < central->numPlacares; i++) {
+		if (central->placares[i].id == id && central->placares[i].ligado) {
+			central->placares[i].temAlerta = FALSE;
+			ZeroMemory(central->placares[i].msgAlerta, sizeof(central->placares[i].msgAlerta));
+		}
+	}
+	ReleaseMutex(central->hMutex);
+
+	_tprintf(STR_ALERTA_CANCELADO, id);
 	return TRUE;
 }
 
-BOOL listarPlacares(CENTRAL* central) {
+BOOL cmdListarPlacares(CENTRAL* central) {
 	WaitForSingleObject(central->hMutex, INFINITE);
 
 	_tprintf(STR_PLACARES_ATIVOS, central->numPlacares);
@@ -261,7 +379,7 @@ BOOL listarPlacares(CENTRAL* central) {
 	return TRUE;
 }
 
-BOOL listarComandos() {
+BOOL cmdListarComandos() {
 	_tprintf(STR_CENTRAL);
 	_tprintf(STR_CMD_COMANDOS);
 	_tprintf(STR_CMD_ALERTA_HELP);
@@ -273,14 +391,141 @@ BOOL listarComandos() {
 	return TRUE;
 }
 
-BOOL encerrarCentral() {
-	//TODO
+BOOL cmdEncerrarCentral(CENTRAL* central) {
+	MSG_CMD msg = { 0 };
+	msg.tipo = 6;
+	enviarTodos(central, &msg, sizeof(MSG_CMD));
+
+	_tprintf(STR_CENTRAL_ENCERRAR);
+
+	WaitForSingleObject(central->hMutex, INFINITE);
+	for (int i = 0; i < central->numPlacares; i++) {
+		if (central->placares[i].hThread) {
+			WaitForSingleObject(central->placares[i].hThread, 5000);
+			CloseHandle(central->placares[i].hThread);
+			central->placares[i].hThread = NULL;
+		}
+	}
+	ReleaseMutex(central->hMutex);
+
+	terminarCentral(central);
+	ExitProcess(0);
+
 	return TRUE;
+}
+
+
+DWORD WINAPI threadPlacar(LPVOID param) {
+	THREAD_PLACAR_ARGS* args = (THREAD_PLACAR_ARGS*)param;
+	CENTRAL* central = args->central;
+	int idx = args->index;
+	free(args);
+
+	HANDLE hPipe = central->placares[idx].hPipe;
+	BYTE tipo;
+	DWORD lido;
+	BOOL ativo = TRUE;
+
+	while (!central->terminar && ativo) {
+
+		BOOL ok = ReadFile(hPipe, &tipo, sizeof(BYTE), &lido, NULL);
+
+		if (!ok || lido == 0) {
+			_tprintf(STR_PLACAR_DESCONECTADO, central->placares[idx].id);
+			break;
+		}
+
+		switch (tipo) {
+		case 1: processarLigar(central, idx);                   
+			break;
+		case 2: processarDesligar(central, idx, &ativo);         
+			break;
+		case 3: processarFimAlerta(central, idx);
+			break;
+		case 4: processarConfirmacaoAlerta(central, idx, hPipe); 
+			break;
+		case 5: processarConfirmacaoCancelar(central, idx, hPipe); 
+			break;
+		default:
+			_tprintf(STR_ERRO_MSG, tipo);
+			break;
+		}
+	}
+
+	DisconnectNamedPipe(hPipe);
+	CloseHandle(hPipe);
+	return 0;
+}
+void processarLigar(CENTRAL* central, int idx) {
+
+	WaitForSingleObject(central->hMutex, INFINITE);
+	central->placares[idx].id = central->proximoId++;
+	central->placares[idx].ligado = TRUE;
+	DWORD id = central->placares[idx].id;
+	ReleaseMutex(central->hMutex);
+
+	MSG_ID resposta = { 0 };
+	resposta.tipo = 7;
+	resposta.identificador = id;
+
+	DWORD escrito;
+	WriteFile(central->placares[idx].hPipe, &resposta, sizeof(MSG_ID), &escrito, NULL);
+
+	_tprintf(STR_PLACAR_LIGADO, id);
+}
+
+void processarDesligar(CENTRAL* central, int idx, BOOL* ativo) {
+	MSG_CMD confirmacao = { 0 };
+	confirmacao.tipo = 2;
+
+	DWORD escrito;
+	WriteFile(central->placares[idx].hPipe, &confirmacao, sizeof(MSG_CMD), &escrito, NULL);
+
+	WaitForSingleObject(central->hMutex, INFINITE);
+	central->placares[idx].ligado = FALSE;
+	central->placares[idx].temAlerta = FALSE;
+	ReleaseMutex(central->hMutex);
+
+	_tprintf(STR_PLACAR_DESLIGADO, central->placares[idx].id);
+	*ativo = FALSE;
+}
+
+void processarFimAlerta(CENTRAL* central, int idx) {
+	WaitForSingleObject(central->hMutex, INFINITE);
+	central->placares[idx].temAlerta = FALSE;
+	ZeroMemory(central->placares[idx].msgAlerta, sizeof(central->placares[idx].msgAlerta));
+	ReleaseMutex(central->hMutex);
+
+	_tprintf(STR_PLACAR_FIM_ALERTA, central->placares[idx].id);
+}
+
+void processarConfirmacaoAlerta(CENTRAL* central, int idx, HANDLE hPipe) {
+	MSG_ALERTA confirmacao = { 0 };
+	DWORD lido;
+
+	ReadFile(hPipe, (LPBYTE)&confirmacao + sizeof(BYTE), sizeof(MSG_ALERTA) - sizeof(BYTE), &lido, NULL);
+
+	_tprintf(STR_ALERTA_CONFIRMADO, central->placares[idx].id);
+}
+
+void processarConfirmacaoCancelar(CENTRAL* central, int idx, HANDLE hPipe) {
+	MSG_CMD confirmacao = { 0 };
+	DWORD lido;
+
+	ReadFile(hPipe, (LPBYTE)&confirmacao + sizeof(BYTE), sizeof(MSG_CMD) - sizeof(BYTE), &lido, NULL);
+
+	_tprintf(STR_CANCELAR_CONFIRMADO, central->placares[idx].id);
 }
 
 void terminarCentral(CENTRAL* central) {
 	if (central->hThreads[0]) CloseHandle(central->hThreads[0]);
 	if (central->hThreads[1]) CloseHandle(central->hThreads[1]);
 	if (central->hMutex) CloseHandle(central->hMutex);
+	if (central->hPipe)  CloseHandle(central->hPipe);
+
+	for (int i = 0; i < central->numPlacares; i++) {
+		if (central->placares[i].hPipe)
+			CloseHandle(central->placares[i].hPipe);
+	}
 }
 

@@ -23,6 +23,7 @@
 #define STR_ERRO_ALERTA_REGISTRY _T("\n[ERRO] Ler alerta do registry!\n")
 #define STR_ERRO_CRIAR_THREADS _T("[ERRO] Criar threads.\n")
 #define STR_ERRO_CRIAR_EVENTOS _T("[ERRO] Criar eventos.\n")
+#define STR_ERRO_LIGAR_CENTRAL _T("[ERRO] Central não disponível\n")
 
 // Comandos
 #define STR_CMD_LIGAR _T("liga")

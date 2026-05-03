@@ -12,6 +12,7 @@ typedef struct {
 	DWORD identificador;
 	BOOL ligado;
 	BOOL terminar;
+	HANDLE hPipe;
 	HANDLE hEventoNotificar;
 	HANDLE hEventoTerminar;
 	HANDLE hTimer;

@@ -15,7 +15,15 @@
 #define STR_PLACAR_ATIVO _T("Ativo")
 #define STR_PLACAR_DESATIVO _T("Desativo")
 #define STR_INSERT_PLACAR_ID_OR_ALL _T("Insira o ID do placar: ")
-#define STR_WAITING_CONNECTION _T("A aguardar conexão...\n")
+#define STR_WAITING_CONNECTION _T("\nA aguardar conexão...\n")
+#define STR_PLACAR_LIGADO _T("\n[CENTRAL] Placar ligado %d\n")
+#define STR_PLACAR_DESLIGADO _T("\n[CENTRAL] Placar desligado %d\n")
+#define STR_PLACAR_FIM_ALERTA _T("\n[CENTRAL] Placar %d fim de alerta\n")
+#define STR_ALERTA_CONFIRMADO _T("\n[CENTRAL] Placar %d - Alerta confirmado\n")
+#define STR_ALERTA_CONFIRMADO _T("\n[CENTRAL] Placar %d - Alerta confirmado\n")
+#define STR_CANCELAR_CONFIRMADO _T("\n[CENTRAL] Placar %d - Cancelar confirmado\n")
+#define STR_ALERTA_CANCELADO _T("\n[CENTRAL] Alerta %d cancelado\n")
+#define STR_CENTRAL_ENCERRAR _T("\n[CENTRAL] A encerrar a central...\n")
 
 // Erros
 #define STR_PIPE_NAME_NOT_FOUND _T("[ERRO] O nome do 'PIPE' não foi especificado!\n")
@@ -27,6 +35,11 @@
 #define STR_CMD_ALERTA_ERRO _T("[ERRO] Uso: alerta <msg> <duracao> [id]\n")
 #define STR_CMD_CANCELAR_ERRO _T("[ERRO] Uso: cancelar <msg> <duracao> [id]\n")
 #define STR_MAX_PLACARES_REACHED _T("[ERRO] Limite de placares atingido!\n")
+#define STR_ERRO_CONNECT_PIPE _T("[ERRO] Não foi possível ligar ao PIPE: %s\n")
+#define STR_ERRO_MAX_PLACARES _T("[ERRO] Máximo de placares atingido!\n")
+#define STR_PLACAR_DESCONECTADO _T("[ERRO] Placar %d desconectado inesperadamente...\n")
+#define STR_ERRO_MSG _T("[ERRO] Erro ao ler mensagem: %d\n")
+#define STR_PLACAR_NAO_ENCONTRADO _T("[ERRO] Placar não encontrado: %d\n")
 
 // Comandos
 #define STR_CMD_COMANDOS _T("Comandos disponíveis: \n\n")
