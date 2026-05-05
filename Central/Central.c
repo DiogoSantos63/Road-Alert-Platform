@@ -151,7 +151,7 @@ DWORD WINAPI threadComandos(LPVOID param) {
 			break;
 		case CMD_CANCELAR:
 			if (args == NULL)
-				_tprintf(STR_CMD_ALERTA_ERRO);
+				_tprintf(STR_CMD_CANCELAR_ERRO);
 			cmdCancelarAlerta(central, args);
 			break;
 		case CMD_LISTAR:

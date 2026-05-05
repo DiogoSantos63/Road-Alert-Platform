@@ -33,6 +33,7 @@
 #define STR_MUTEX_CREATION_ERROR _T("[ERRO] Erro ao criar o Mutex: %lu\n")
 #define STR_NAMED_PIPE_CREATION _T("[ERRO] Erro ao criar o NamedPipe: %lu\n")
 #define STR_CMD_ALERTA_ERRO _T("[ERRO] Uso: alerta <msg> <duracao> [id]\n")
+#define STR_CMD_CANCEL_ALERTA_ERRO _T("[ERRO] Uso: cancelar [id]\n")
 #define STR_CMD_CANCELAR_ERRO _T("[ERRO] Uso: cancelar <msg> <duracao> [id]\n")
 #define STR_MAX_PLACARES_REACHED _T("[ERRO] Limite de placares atingido!\n")
 #define STR_ERRO_CONNECT_PIPE _T("[ERRO] Não foi possível ligar ao PIPE: %s\n")
