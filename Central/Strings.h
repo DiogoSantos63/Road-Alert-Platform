@@ -1,7 +1,7 @@
 #ifndef STRINGS_H
 #define STRINGS_H
 
-#include <tchar.h> 
+#include <tchar.h>
 
 // Info
 #define STR_EMPTY _T("")

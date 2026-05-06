@@ -1,7 +1,7 @@
 #ifndef STRINGS_H
 #define STRINGS_H
 
-#include <tchar.h> 
+#include <tchar.h>
 
 // Info
 #define STR_CMD_INPUT _T("CMD> ")
@@ -11,7 +11,7 @@
 #define STR_ALERTA _T("'%s' (%d segundos)\n")
 #define STR_ALERTA_FIM _T("'---'\n")
 
-// Avisos 
+// Avisos
 #define STR_PLACAR_LIGADO _T("Placar já ligado.\n")
 #define STR_PLACAR_ENCERRAR _T("A terminar...\n\n")
 
@@ -29,5 +29,4 @@
 #define STR_CMD_LIGAR _T("liga")
 #define STR_CMD_DESLIGAR _T("desliga")
 
-
-#endif 
+#endif
