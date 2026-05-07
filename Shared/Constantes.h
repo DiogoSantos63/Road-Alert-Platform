@@ -1,6 +1,8 @@
 #ifndef CONSTANTES_H
 #define CONSTANTES_H
 
+#define MAX_BUF 1024
+
 #define TAM_MSG 140
 
 #define TAM_CMD 64

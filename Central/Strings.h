@@ -16,6 +16,7 @@
 #define STR_PLACAR_DESATIVO _T("Desativo")
 #define STR_INSERT_PLACAR_ID_OR_ALL _T("Insira o ID do placar: ")
 #define STR_WAITING_CONNECTION _T("\nA aguardar conexão...\n")
+#define STR_WAITING_CONNECTIONS_AND_REQUESTS _T("\nA aguardar conexão ou pedido...\n")
 #define STR_PLACAR_LIGADO _T("\n[CENTRAL] Placar ligado %d\n")
 #define STR_PLACAR_DESLIGADO _T("\n[CENTRAL] Placar desligado %d\n")
 #define STR_PLACAR_FIM_ALERTA _T("\n[CENTRAL] Placar %d fim de alerta\n")
@@ -26,6 +27,8 @@
 #define STR_CENTRAL_ENCERRAR _T("\n[CENTRAL] A encerrar a central...\n")
 
 // Erros
+#define STR_OUT_OF_RANGE _T("[ERRO] Index do placar acima do limite!\n")
+#define STR_ERRO_DISCONNECT_PIPE _T("[ERRO] Erro ao desconectar named pipe!\n")
 #define STR_PIPE_NAME_NOT_FOUND _T("[ERRO] O nome do 'PIPE' não foi especificado!\n")
 #define STR_PIPE_NAME_EXCEEDED _T("[ERRO] O nome do PIPE excedeu o limite!\n")
 #define STR_ERRO_INIT_THREADS _T("[ERRO] Erro ao criar threads\n")

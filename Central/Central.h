@@ -4,21 +4,37 @@
 #include "Constantes.h"
 #include "Types.h"
 
+typedef enum { ESPERA_CONEXAO, LE_PEDIDO, ENVIA_RESPOSTA } PLACAR_STATE;
+
 typedef struct {
   DWORD id;
-  HANDLE hPipe;
-  HANDLE hThread;
   BOOL ligado;
   BOOL temAlerta;
   TCHAR msgAlerta[TAM_MSG];
   DWORD duracaoAlerta;
+
+  HANDLE hPipeInstance;
+  TCHAR bufferPedido[MAX_BUF];
+  DWORD bytesPedido;
+  TCHAR bufferResposta[MAX_BUF];
+  DWORD bytesReposta;
+  OVERLAPPED olpInstance;
+  BOOL operacaoPendente;
+  BOOL conexaoAtiva;
+  PLACAR_STATE estadoIO;
+
+  // HANDLE hThread;
 } PLACAR_INFO;
 
 typedef struct {
   TCHAR nomePipe[TAM_NOME_PIPE];
   HANDLE hPipe;
   HANDLE hThreads[THREADS_CENTRAL];
+
   PLACAR_INFO placares[MAX_PLACARES];
+  HANDLE hEvents[MAX_PLACARES];
+  DWORD iPlacarOperation; // index da instancia do pipe onde ocorreu operacao
+
   DWORD numPlacares;
   DWORD proximoId;
   HANDLE hMutex;
