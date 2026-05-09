@@ -12,9 +12,9 @@
 
 //TODO: 
 // - validar input do comando alerta
+// - permitir alerta com aspas
 // - fix do print dos ids
 // - fix de mostar os alertas ativos para cada placar
-// - fix do evento encerrar
 // - Limpar comentarios
 
 int _tmain(int argc, TCHAR *argv[]) {
@@ -171,7 +171,6 @@ BOOL criarPipe(CENTRAL *central) {
 }
 
 BOOL initThreads(CENTRAL *central) {
-  LOG("INIT THREADS");
   central->hThreads[0] = CreateThread(NULL, 0, threadComandos, central, 0, NULL);
   central->hThreads[1] = CreateThread(NULL, 0, threadPlacaresOverlappedIO, central, 0, NULL);
 
@@ -250,22 +249,31 @@ void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar) {
       placar->tipo_msg_enviar = LIGAR;
       placar->estadoIO = ENVIA_RESPOSTA;
       break;
+
     case DESLIGAR:
       placar->msg_por_enviar = TRUE;
       placar->tipo_msg_enviar = DESLIGAR;
       placar->estadoIO = ENVIA_RESPOSTA;
       break;
+
     case FIM_ALERTA:
       LOG("Fim do alerta do placar %d", placar->id);
+      ZeroMemory(placar->msgAlerta, sizeof(placar->msgAlerta));
       placar->temAlerta = FALSE;
       placar->msg_por_enviar = FALSE;
       placar->estadoIO = LE_PEDIDO;
       break;
+
     case NOVO_ALERTA:
+      placar->msg_por_enviar = FALSE;
+      placar->estadoIO = LE_PEDIDO;
+      placar->temAlerta = TRUE;
+      break;
+
     case CANCELAR_ALERTA:
       placar->msg_por_enviar = FALSE;
       placar->estadoIO = LE_PEDIDO;
-      if(tipo == CANCELAR_ALERTA) placar->temAlerta = FALSE;
+      placar->temAlerta = FALSE;
       break;
     default:
       placar->msg_por_enviar = FALSE;
@@ -325,7 +333,6 @@ DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param) {
         break;
       }
     } else {
-      _tprintf(STR_WAITING_CONNECTIONS_AND_REQUESTS);
       _tprintf(STR_CMD_INPUT);
     }
 
@@ -673,8 +680,6 @@ BOOL cmdCancelarAlerta(CENTRAL *central, TCHAR *args) {
 
   DWORD id = (DWORD)_ttoi(args);
 
-  MSG_CMD msg = {.tipo = CANCELAR_ALERTA};
-
   if (id == 0) {
     _tprintf(STR_CMD_CANCEL_ALERTA_ERRO);
     return FALSE;
@@ -682,10 +687,9 @@ BOOL cmdCancelarAlerta(CENTRAL *central, TCHAR *args) {
 
   WaitForSingleObject(central->hMutex, INFINITE);
   for (int i = 0; i < MAX_PLACARES; i++) {
-    if (central->placares[i].id == id && central->placares[i].ligado) {
+    if ((id == 0 || central->placares[i].id == id) && central->placares[i].ligado) {
       central->placares[i].temAlerta = FALSE;
       ZeroMemory(central->placares[i].msgAlerta, sizeof(central->placares[i].msgAlerta));
-
 
       // set dados da mensagem e acordar o WaitForMultipleObjects
       central->placares[i].msg_por_enviar = TRUE;

@@ -180,11 +180,9 @@ DWORD WINAPI threadAlertas(LPVOID param) {
       _tprintf(STR_CMD_INPUT);
       LeaveCriticalSection(&placar->cs);
 
-      // envia fim de alerta ao central
+      // notificar thread de escuta para enviar fim de alerta ao central
       if(placar->ligado) {
-          MSG_CMD fim = { .tipo = FIM_ALERTA };
-          DWORD escrito;
-          WriteFile(placar->hPipe, &fim, sizeof(MSG_CMD), &escrito, NULL);
+        CancelSynchronousIo(placar->hThreadEscutaCentral);
       }
 
       placar->alertaAtivo = FALSE;
@@ -303,7 +301,10 @@ void desligarPlacar(PLACAR *placar, BOOL comConfirmacao) {
 
   LOG("A desligar...");
 
-  // desbloquear thread de escuta
+  // desbloquear thread de escuta, para podermos fazer writes / reads
+  // sem usar overlapped IO
+  placar->terminar = TRUE;
+  placar->ligado = FALSE;
   CancelSynchronousIo(placar->hThreadEscutaCentral);
 
   if (comConfirmacao) {
@@ -325,12 +326,15 @@ void desligarPlacar(PLACAR *placar, BOOL comConfirmacao) {
     }
   }
 
-  placar->terminar = TRUE;
-  placar->ligado = FALSE;
   SetEvent(placar->hEventoTerminar);
 }
 
 
+// Thread responsavel por reads/writes do/ao central
+// Se for preciso fazer um write/read de outra thread,
+// temos de primeiro desbloquear esta thread com
+// CancelSynchronousIo(placar->hThreadEscutaCentral);
+// (fazemos isto ao desligar e ao enviar o fim de alerta)
 DWORD WINAPI threadEscutaCentral(LPVOID param) {
   PLACAR* placar = (PLACAR*)param;
   DWORD lido, escrito;
@@ -342,19 +346,19 @@ DWORD WINAPI threadEscutaCentral(LPVOID param) {
       if (!res || lido == 0) {
         if (GetLastError() == ERROR_OPERATION_ABORTED) {
           // abortado pelo comando desligar
-          break; 
-        }
-
-        if (!placar->terminar) {
-          LOG("Conexao ao central perdida");
+          if(placar->terminar) {
+            break;
+          } else {
+            // abortado pelo fim alerta
+            buffer[0] = FIM_ALERTA;
+          }
+        } else {
+          LOG("Conexao perdida, encerrando placar...");
           placar->ligado = FALSE;
           placar->terminar = TRUE;
           SetEvent(placar->hEventoTerminar);
           break;
         }
-
-        LOG("Erro desconhecido");
-        break;
       }
 
       BYTE tipo = buffer[0];
@@ -374,7 +378,7 @@ DWORD WINAPI threadEscutaCentral(LPVOID param) {
               break;
           }
           case CANCELAR_ALERTA: {
-              if(placar->alertaAtivo) {
+              if(!placar->alertaAtivo) {
                 break;
               };
 
@@ -384,6 +388,16 @@ DWORD WINAPI threadEscutaCentral(LPVOID param) {
               // enviar confirmacao
               WriteFile(placar->hPipe, &cmd, sizeof(MSG_CMD), &escrito, NULL);
               SetEvent(placar->hEventoCancelar);
+              break;
+          }
+          case FIM_ALERTA: {
+                             LOG("RECEBI FIM ALERTA");
+              MSG_CMD fim = { .tipo = FIM_ALERTA };
+              DWORD escrito;
+
+              // enviar confirmacao
+              WriteFile(placar->hPipe, &fim, sizeof(MSG_CMD), &escrito, NULL);
+              LOG("ESCREVI CONFIRMA");
               break;
           }
           case ENCERRAR_PLATAFORMA: {

@@ -23,7 +23,7 @@
 #define STR_ALERTA_CONFIRMADO _T("\n[CENTRAL] Placar %d - Alerta confirmado\n")
 #define STR_ALERTA_CONFIRMADO _T("\n[CENTRAL] Placar %d - Alerta confirmado\n")
 #define STR_CANCELAR_CONFIRMADO _T("\n[CENTRAL] Placar %d - Cancelar confirmado\n")
-#define STR_ALERTA_CANCELADO _T("\n[CENTRAL] Alerta %d cancelado\n")
+#define STR_ALERTA_CANCELADO _T("\n[CENTRAL] Alerta do placar %d cancelado\n")
 #define STR_CENTRAL_ENCERRAR _T("\n[CENTRAL] A encerrar a central...\n")
 
 // Erros
@@ -38,7 +38,7 @@
 #define STR_MUTEX_CREATION_ERROR _T("[ERRO] Erro ao criar o Mutex: %lu\n")
 #define STR_NAMED_PIPE_CREATION _T("[ERRO] Erro ao criar o NamedPipe: %lu\n")
 #define STR_CMD_ALERTA_ERRO _T("[ERRO] Uso: alerta <msg> <duracao> [id]\n")
-#define STR_CMD_CANCEL_ALERTA_ERRO _T("[ERRO] Uso: cancelar [id]\n")
+#define STR_CMD_CANCEL_ALERTA_ERRO _T("[ERRO] Uso: cancelar [id_placar]\n")
 #define STR_CMD_CANCELAR_ERRO _T("[ERRO] Uso: cancelar <msg> <duracao> [id]\n")
 #define STR_MAX_PLACARES_REACHED _T("[ERRO] Limite de placares atingido!\n")
 #define STR_ERRO_CONNECT_PIPE _T("[ERRO] Não foi possível ligar ao PIPE: %s\n")
