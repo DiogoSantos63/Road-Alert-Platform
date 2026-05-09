@@ -195,7 +195,7 @@ DWORD WINAPI threadAlertas(LPVOID param) {
 
       EnterCriticalSection(&placar->cs);
       mostrarHora();
-      LOG("ALERTA CANCELADO");
+      LOG("Alerta cancelado");
       _tprintf(STR_CMD_INPUT);
       LeaveCriticalSection(&placar->cs);
 
@@ -391,13 +391,11 @@ DWORD WINAPI threadEscutaCentral(LPVOID param) {
               break;
           }
           case FIM_ALERTA: {
-                             LOG("RECEBI FIM ALERTA");
               MSG_CMD fim = { .tipo = FIM_ALERTA };
               DWORD escrito;
 
               // enviar confirmacao
               WriteFile(placar->hPipe, &fim, sizeof(MSG_CMD), &escrito, NULL);
-              LOG("ESCREVI CONFIRMA");
               break;
           }
           case ENCERRAR_PLATAFORMA: {

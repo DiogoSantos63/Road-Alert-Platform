@@ -42,6 +42,7 @@ typedef struct {
   DWORD proximoId;
   HANDLE hMutex;
   BOOL terminar;
+  BOOL mostrarPrompt;
 } CENTRAL;
 
 typedef struct {

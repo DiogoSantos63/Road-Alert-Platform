@@ -10,10 +10,10 @@
 #include "Types.h"
 #include "Utils.h"
 
-//TODO: 
+// TODO: 
 // - validar input do comando alerta (nao permitir duracoes negativas)
 // - permitir alerta com aspas
-// - fix do print dos ids
+// - ver se falta fazer lock de mutexes entre threads
 
 int _tmain(int argc, TCHAR *argv[]) {
   initConsola();
@@ -217,6 +217,8 @@ DWORD WINAPI threadComandos(LPVOID param) {
         _tprintf(STR_HELP);
         break;
     }
+
+    central->mostrarPrompt = TRUE;
   }
   return 0;
 }
@@ -238,7 +240,8 @@ void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar) {
       break;
 
     case FIM_ALERTA:
-      LOG("Fim do alerta do placar %d", placar->id);
+      //_tprintf(_T("Fim do alerta do placar %d\n"), placar->id);
+      //placar->mostrarPrompt = TRUE;
       ZeroMemory(placar->msgAlerta, sizeof(placar->msgAlerta));
       placar->temAlerta = FALSE;
       placar->msg_por_enviar = FALSE;
@@ -264,7 +267,7 @@ void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar) {
 }
 
 void processarEscritaConcluida(CENTRAL *central, PLACAR_INFO *placar) {
-  LOG("Mensagem enviada com sucesso");
+  //LOG("Mensagem enviada com sucesso");
 
   LOCK(central->hMutex);
   placar->msg_por_enviar = FALSE;
@@ -275,7 +278,8 @@ void processarEscritaConcluida(CENTRAL *central, PLACAR_INFO *placar) {
       MSG_ID *resposta = (MSG_ID*)placar->bufferResposta;
       placar->id = resposta->identificador;
 
-      LOG("Placar ligado - id: %d", placar->id);
+      _tprintf(_T("Placar ligado - %d\n"), placar->id);
+      central->mostrarPrompt = TRUE;
 
       placar->ligado = TRUE;
       central->numPlacares++;
@@ -283,7 +287,9 @@ void processarEscritaConcluida(CENTRAL *central, PLACAR_INFO *placar) {
 
     case ENCERRAR_PLATAFORMA:
     case DESLIGAR:
-      LOG("Placar desligado - id: %d", placar->id);
+      _tprintf(_T("Placar desligado - %d\n"), placar->id);
+      central->mostrarPrompt = TRUE;
+
       //FlushFileBuffers(placar->hPipeInstance);
 
       placar->id = -1;
@@ -313,8 +319,11 @@ DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param) {
         LOG("Todos os placares terminados. A sair da thread de I/O.");
         break;
       }
-    } else {
+    }
+
+    if(central->mostrarPrompt) {
       _tprintf(STR_CMD_INPUT);
+      central->mostrarPrompt = FALSE;
     }
 
 
@@ -354,6 +363,7 @@ DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param) {
             }
 
             LOG("Erro desconhecido");
+            central->mostrarPrompt = TRUE;
             continue;
           }
           central->placares[i].estadoIO = LE_PEDIDO;
@@ -462,12 +472,14 @@ BOOL handleMsgPlacarEnviar(CENTRAL *central, PLACAR_INFO *placar) {
     }
     case DESLIGAR: {
       LOG("A enviar msg desligar");
+      central->mostrarPrompt = TRUE;
       memcpy(placar->bufferResposta, placar->bufferPedido, sizeof(MSG_CMD));
       placar->bytesResposta = sizeof(MSG_CMD);
       break;
     }
     case NOVO_ALERTA: {
       LOG("A enviar alerta");
+      central->mostrarPrompt = TRUE;
       MSG_ALERTA alerta = { .tipo = NOVO_ALERTA, .duracao = placar->duracaoAlerta };
       _tcscpy_s(alerta.msg, TAM_MSG, placar->msgAlerta);
       memcpy(placar->bufferResposta, &alerta, sizeof(MSG_ALERTA));
@@ -476,6 +488,7 @@ BOOL handleMsgPlacarEnviar(CENTRAL *central, PLACAR_INFO *placar) {
     }
     case CANCELAR_ALERTA: {
       LOG("A cancelar alerta");
+      central->mostrarPrompt = TRUE;
       MSG_CMD cmd = { .tipo = CANCELAR_ALERTA };
       memcpy(placar->bufferResposta, &cmd, sizeof(MSG_CMD));
       placar->bytesResposta = sizeof(MSG_CMD);
@@ -483,6 +496,7 @@ BOOL handleMsgPlacarEnviar(CENTRAL *central, PLACAR_INFO *placar) {
     }
     case ENCERRAR_PLATAFORMA: {
       LOG("A enviar comando encerrar");
+      central->mostrarPrompt = TRUE;
       MSG_CMD cmd = { .tipo = ENCERRAR_PLATAFORMA };
       memcpy(placar->bufferResposta, &cmd, sizeof(MSG_CMD));
       placar->bytesResposta = sizeof(MSG_CMD);
@@ -584,6 +598,7 @@ BOOL cmdEnviarAlerta(CENTRAL *central, TCHAR *args) {
 BOOL cmdCancelarAlerta(CENTRAL *central, TCHAR *args) {
   if (args == NULL) {
     _tprintf(STR_CMD_CANCEL_ALERTA_ERRO);
+    central->mostrarPrompt = TRUE;
     return FALSE;
   }
 
@@ -591,6 +606,7 @@ BOOL cmdCancelarAlerta(CENTRAL *central, TCHAR *args) {
 
   if (id == 0) {
     _tprintf(STR_CMD_CANCEL_ALERTA_ERRO);
+    central->mostrarPrompt = TRUE;
     return FALSE;
   }
 
@@ -606,6 +622,7 @@ BOOL cmdCancelarAlerta(CENTRAL *central, TCHAR *args) {
       CancelIoEx(central->placares[i].hPipeInstance, &central->placares[i].olpInstance);
     }
   }
+  central->mostrarPrompt = TRUE;
   ReleaseMutex(central->hMutex);
 
   _tprintf(STR_ALERTA_CANCELADO, id);
@@ -623,6 +640,8 @@ BOOL cmdListarPlacares(CENTRAL *central) {
           central->placares[i].temAlerta ? central->placares[i].msgAlerta : STR_EMPTY);
     }
   }
+
+  central->mostrarPrompt = TRUE;
   ReleaseMutex(central->hMutex);
 
   return TRUE;
