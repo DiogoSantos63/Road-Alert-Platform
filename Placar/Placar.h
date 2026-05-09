@@ -18,6 +18,7 @@ typedef struct {
   HANDLE hEventoCancelar;
   HANDLE hTimer;
   MSG_ALERTA alertaAtual;
+  BOOL alertaAtivo;
   CRITICAL_SECTION cs;
 
   HANDLE hThreadComandos;

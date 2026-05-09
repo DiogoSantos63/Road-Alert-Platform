@@ -10,6 +10,7 @@
 #include "Types.h"
 #include "Utils.h"
 
+
 int _tmain(int argc, TCHAR *argv[]) {
   initConsola();
 
@@ -146,13 +147,13 @@ DWORD WINAPI threadAlertas(LPVOID param) {
       placar->hEventoCancelar
   };
 
-  BOOL esperar_por_timer = FALSE;
+  placar->alertaAtivo = FALSE;
   while (!placar->terminar) {
-    DWORD result = WaitForMultipleObjects(esperar_por_timer ? 4 : 2, eventos, FALSE, INFINITE);
+    DWORD result = WaitForMultipleObjects(placar->alertaAtivo ? 4 : 2, eventos, FALSE, INFINITE);
 
     // terminar
     if (result == WAIT_OBJECT_0) {
-      esperar_por_timer = FALSE;
+      placar->alertaAtivo = FALSE;
       continue;
     }
 
@@ -167,12 +168,12 @@ DWORD WINAPI threadAlertas(LPVOID param) {
       _tprintf(STR_CMD_INPUT);
       LeaveCriticalSection(&placar->cs);
 
-      esperar_por_timer = TRUE;
+      placar->alertaAtivo = TRUE;
       initTimer(placar->hTimer, alerta.duracao);
     }
 
     // timer expirou
-    if (esperar_por_timer && result == WAIT_OBJECT_0 + 2) {
+    if (placar->alertaAtivo && result == WAIT_OBJECT_0 + 2) {
       EnterCriticalSection(&placar->cs);
       mostrarHora();
       _tprintf(STR_ALERTA_FIM);
@@ -186,12 +187,12 @@ DWORD WINAPI threadAlertas(LPVOID param) {
           WriteFile(placar->hPipe, &fim, sizeof(MSG_CMD), &escrito, NULL);
       }
 
-      esperar_por_timer = FALSE;
+      placar->alertaAtivo = FALSE;
       CancelWaitableTimer(placar->hTimer);
     }
 
     // alerta cancelado pelo central
-    if (esperar_por_timer && result == WAIT_OBJECT_0 + 3) {
+    if (placar->alertaAtivo && result == WAIT_OBJECT_0 + 3) {
       ResetEvent(placar->hEventoCancelar);
 
       EnterCriticalSection(&placar->cs);
@@ -200,7 +201,7 @@ DWORD WINAPI threadAlertas(LPVOID param) {
       _tprintf(STR_CMD_INPUT);
       LeaveCriticalSection(&placar->cs);
 
-      esperar_por_timer = FALSE;
+      placar->alertaAtivo = FALSE;
       CancelWaitableTimer(placar->hTimer);
     }
 
@@ -295,17 +296,37 @@ void ligarPlacar(PLACAR *placar) {
 }
 
 void desligarPlacar(PLACAR *placar) {
-  LOG("A enviar pedido de desligar à central...");
+  if(placar->terminar == TRUE){
+    // ja foi enviado pedido de desligar
+    return;
+  }
+
+  LOG("A desligar...");
 
   if (placar->ligado && placar->hPipe && placar->hPipe != INVALID_HANDLE_VALUE) {
     MSG_CMD msg = { .tipo = DESLIGAR };
-    DWORD escrito;
-    WriteFile(placar->hPipe, &msg, sizeof(MSG_CMD), &escrito, NULL);
-  } else {
-    // fallback
-    placar->terminar = TRUE;
-    SetEvent(placar->hEventoTerminar);
+    DWORD escrito, lido;
+
+    // desbloquear READ para podermos fazer o write, sem ter de usar overlapped IO
+    CancelSynchronousIo(placar->hThreadEscutaCentral);
+    BOOL res = WriteFile(placar->hPipe, &msg, sizeof(MSG_CMD), &escrito, NULL);
+
+    if(res == 0 || escrito != sizeof(msg)) {
+      LOG("Nao foi possivel enviar pedido de confirmacao, encerrando sistema...");
+    } else {
+      res = ReadFile(placar->hPipe, &msg, sizeof(MSG_CMD), &lido, NULL);
+
+      if(res == 0 || escrito != sizeof(msg)) {
+        LOG("Nao foi possivel receber confirmacao, encerrando sistema...");
+      } else {
+        LOG("Recebi confirmacao");
+      }
+    }
   }
+
+  placar->terminar = TRUE;
+  placar->ligado = FALSE;
+  SetEvent(placar->hEventoTerminar);
 }
 
 
@@ -318,6 +339,11 @@ DWORD WINAPI threadEscutaCentral(LPVOID param) {
       BOOL res = ReadFile(placar->hPipe, buffer, sizeof(buffer), &lido, NULL);
 
       if (!res || lido == 0) {
+        if (GetLastError() == ERROR_OPERATION_ABORTED) {
+          // abortado pelo comando desligar
+          break; 
+        }
+
         if (!placar->terminar) {
           LOG("Conexao ao central perdida");
           placar->ligado = FALSE;
@@ -329,13 +355,6 @@ DWORD WINAPI threadEscutaCentral(LPVOID param) {
 
       BYTE tipo = buffer[0];
       switch(tipo) {
-          case DESLIGAR: {
-              LOG("A Desligar (confirmacao recebida)");
-              placar->terminar = TRUE;
-              placar->ligado = FALSE;
-              SetEvent(placar->hEventoTerminar);
-              break;
-          }
           case NOVO_ALERTA: {
               LOG("Novo Alerta!");
               MSG_ALERTA *alerta = (MSG_ALERTA*)buffer;
@@ -351,6 +370,10 @@ DWORD WINAPI threadEscutaCentral(LPVOID param) {
               break;
           }
           case CANCELAR_ALERTA: {
+              if(placar->alertaAtivo) {
+                break;
+              };
+
               LOG("Alerta cancelado");
               MSG_CMD cmd = { .tipo = CANCELAR_ALERTA };
 

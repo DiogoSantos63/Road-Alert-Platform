@@ -10,6 +10,11 @@
 #include "Types.h"
 #include "Utils.h"
 
+//TODO: 
+// - validar input do comando alerta
+// - fix do print dos ids
+// - fix de mostar os alertas ativos para cada placar
+// - fix do evento encerrar
 // - Limpar comentarios
 
 int _tmain(int argc, TCHAR *argv[]) {
@@ -279,19 +284,24 @@ void processarEscritaConcluida(CENTRAL *central, PLACAR_INFO *placar) {
   switch(placar->tipo_msg_enviar) {
     case LIGAR:
       MSG_ID *resposta = (MSG_ID*)placar->bufferResposta;
-      LOG("Nova conexão - Placar %d", resposta->identificador);
+
       placar->id = resposta->identificador;
+
+      LOG("Nova conexão - Placar %d", placar->id);
+
       placar->ligado = TRUE;
       central->numPlacares++;
       break;
 
     case DESLIGAR:
       LOG("A desligar placar %d", placar->id);
+      //FlushFileBuffers(placar->hPipeInstance);
+
       placar->id = -1;
       placar->ligado = FALSE;
       placar->temAlerta = FALSE;
       central->numPlacares--;
-      desconectarPlacar(central, placar);
+      //desconectarPlacar(central, placar);
       break;
   }
   UNLOCK(central->hMutex);
