@@ -4,6 +4,8 @@
 #define UNICODE
 #define _UNICODE
 
+#define LOG(str) _tprintf(_T(str)); _tprintf("\n")
+
 #include <fcntl.h>
 #include <io.h>
 #include <stdio.h>

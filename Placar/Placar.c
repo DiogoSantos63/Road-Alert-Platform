@@ -244,8 +244,16 @@ void ligarPlacar(PLACAR *placar) {
   _tcscpy_s(nomePipeCompleto, TAM_NOME_PIPE, CENTRAL_PIPE);
   _tcscat_s(nomePipeCompleto, TAM_NOME_PIPE, placar->nomePipe);
 
-  placar->hPipe = CreateFile(nomePipeCompleto, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+  placar->hPipe = CreateFile( //
+      nomePipeCompleto, //
+      GENERIC_READ | GENERIC_WRITE, //
+      0, //
+      NULL, //
+      OPEN_EXISTING, //
+      0, //
+      NULL); //
 
+  //TODO: WaitNamedPipe para esperar até haver uma instancia de pipe disponivel
   if (placar->hPipe == INVALID_HANDLE_VALUE) {
     _tprintf(STR_ERRO_LIGAR_CENTRAL, GetLastError());
     return;
@@ -254,17 +262,18 @@ void ligarPlacar(PLACAR *placar) {
   DWORD modo = PIPE_READMODE_MESSAGE;
   SetNamedPipeHandleState(placar->hPipe, &modo, NULL, NULL);
 
-  MSG_CMD msg = {0};
-  msg.tipo = 1;
+  MSG_CMD msg = {.tipo = LIGAR};
 
   DWORD escrito;
   WriteFile(placar->hPipe, &msg, sizeof(MSG_CMD), &escrito, NULL);
 
   MSG_ID resposta = {0};
   DWORD lido;
-  ReadFile(placar->hPipe, &resposta, sizeof(MSG_ID), &lido, NULL);
+  BOOL res;
 
-  if (resposta.tipo != 7) {
+  res = ReadFile(placar->hPipe, &resposta, sizeof(MSG_ID), &lido, NULL);
+
+  if (resposta.tipo != ATRIBUIR_IDENTIFICADOR) {
     _tprintf(STR_ERRO_LIGAR_CENTRAL, 0);
     return;
   }
@@ -275,6 +284,24 @@ void ligarPlacar(PLACAR *placar) {
 }
 
 void desligarPlacar(PLACAR *placar) {
+  LOG("A desligar placar");
+
+  MSG_CMD msg = { .tipo = DESLIGAR };
+
+  DWORD escrito;
+  WriteFile(placar->hPipe, &msg, sizeof(MSG_CMD), &escrito, NULL);
+
+  MSG_CMD resposta = {0};
+  DWORD lido;
+  BOOL res;
+
+
+  res = ReadFile(placar->hPipe, &resposta, sizeof(MSG_CMD), &lido, NULL);
+
+  if (res && resposta.tipo == DESLIGAR) {
+    LOG("Recebi confirmaçao desligar");
+  }
+
   placar->terminar = TRUE;
   SetEvent(placar->hEventoTerminar);
 

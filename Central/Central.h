@@ -14,14 +14,17 @@ typedef struct {
   DWORD duracaoAlerta;
 
   HANDLE hPipeInstance;
-  TCHAR bufferPedido[MAX_BUF];
+  BYTE bufferPedido[MAX_BUF];
   DWORD bytesPedido;
-  TCHAR bufferResposta[MAX_BUF];
-  DWORD bytesReposta;
+  BYTE bufferResposta[MAX_BUF];
+  DWORD bytesResposta;
   OVERLAPPED olpInstance;
   BOOL operacaoPendente;
   BOOL conexaoAtiva;
   PLACAR_STATE estadoIO;
+
+  BOOL msg_por_enviar;
+  TIPO_MSG tipo_msg_enviar;
 
   // HANDLE hThread;
 } PLACAR_INFO;
@@ -57,6 +60,16 @@ BOOL initThreads(CENTRAL *central);
 COMANDO parsearComando(TCHAR *cmd);
 
 DWORD WINAPI threadComandos(LPVOID param);
+
+DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param);
+
+//void updateResposta(CENTRAL *central, PLACAR_INFO *placar);
+
+void desconectarPlacar(PLACAR_INFO *placar);
+
+BOOL handleMsgPlacarReceber(CENTRAL *central, PLACAR_INFO *placar);
+
+BOOL handleMsgPlacarEnviar(CENTRAL *central, PLACAR_INFO *placar);
 
 DWORD WINAPI threadPlacares(LPVOID param);
 

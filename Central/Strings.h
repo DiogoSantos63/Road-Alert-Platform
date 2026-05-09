@@ -27,6 +27,8 @@
 #define STR_CENTRAL_ENCERRAR _T("\n[CENTRAL] A encerrar a central...\n")
 
 // Erros
+#define STR_ERRO_CRIAR_THREADS _T("[ERRO] Criar threads.\n")
+#define STR_ERRO_CRIAR_EVENTOS _T("[ERRO] Criar eventos.\n")
 #define STR_OUT_OF_RANGE _T("[ERRO] Index do placar acima do limite!\n")
 #define STR_ERRO_DISCONNECT_PIPE _T("[ERRO] Erro ao desconectar named pipe!\n")
 #define STR_PIPE_NAME_NOT_FOUND _T("[ERRO] O nome do 'PIPE' não foi especificado!\n")
