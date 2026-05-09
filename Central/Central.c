@@ -557,15 +557,47 @@ void desconectarPlacar(CENTRAL *central, PLACAR_INFO *placar) {
 }
 
 BOOL cmdEnviarAlerta(CENTRAL *central, TCHAR *args) {
-  TCHAR *ctx = NULL;
-  TCHAR *msg = _tcstok_s(args, _T(" "), &ctx);
-  TCHAR *sDuracao = _tcstok_s(NULL, _T(" "), &ctx);
-  TCHAR *sId = _tcstok_s(NULL, _T(" "), &ctx);
+    if (!args) {
+        _tprintf(STR_CMD_ALERTA_ERRO);
+        return FALSE;
+    }
+    
+    TCHAR msg[TAM_MSG] = { 0 };
+    TCHAR* sDuracao = NULL;
+    TCHAR* sId = NULL;
+    TCHAR* ctx = NULL;
 
-  if (!msg || !sDuracao || !sId) {
-    _tprintf(STR_CMD_ALERTA_ERRO);
-    return FALSE;
-  }
+    // verifica se começa com aspas
+    if (args[0] == _T('"')) {
+        TCHAR* fimAspas = _tcschr(args + 1, _T('"'));
+
+        if (!fimAspas) {
+            _tprintf(STR_CMD_ALERTA_ERRO);
+            return FALSE;
+        }
+
+        size_t tamMsg = fimAspas - (args + 1);
+        _tcsncpy_s(msg, TAM_MSG, args + 1, tamMsg);
+
+        TCHAR* resto = fimAspas + 1;
+        if (*resto == _T(' ')) resto++;
+
+        sDuracao = _tcstok_s(resto, _T(" "), &ctx);
+        sId = _tcstok_s(NULL, _T(" "), &ctx);
+
+    }
+    else {
+        TCHAR* msgToken = _tcstok_s(args, _T(" "), &ctx);
+        sDuracao = _tcstok_s(NULL, _T(" "), &ctx);
+        sId = _tcstok_s(NULL, _T(" "), &ctx);
+        _tcscpy_s(msg, TAM_MSG, msgToken);
+    }
+
+    if (!sDuracao || !sId) {
+        _tprintf(STR_CMD_ALERTA_ERRO);
+        return FALSE;
+    }
+
 
   DWORD duracao = (DWORD)_ttoi(sDuracao);
   DWORD id = (DWORD)_ttoi(sId);
