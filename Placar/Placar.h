@@ -15,11 +15,16 @@ typedef struct {
   HANDLE hPipe;
   HANDLE hEventoNotificar;
   HANDLE hEventoTerminar;
+  HANDLE hEventoCancelar;
   HANDLE hTimer;
   MSG_ALERTA alertaAtual;
   CRITICAL_SECTION cs;
-  HANDLE hThreads[2];
+
+  HANDLE hThreadComandos;
+  HANDLE hThreadAlertas;
+  HANDLE hThreadEscutaCentral;
 } PLACAR;
+
 
 BOOL validarArgumentos(PLACAR *placar, int argc, TCHAR *argv[]);
 
@@ -36,6 +41,8 @@ BOOL initEventos(PLACAR *placar);
 DWORD WINAPI threadComandos(LPVOID param);
 
 DWORD WINAPI threadAlertas(LPVOID param);
+
+DWORD WINAPI threadEscutaCentral(LPVOID param);
 
 COMANDO parsearComando(TCHAR *cmd);
 

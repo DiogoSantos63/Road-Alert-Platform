@@ -24,7 +24,8 @@ int _tmain(int argc, TCHAR *argv[]) {
     return 1;
   }
 
-  WaitForMultipleObjects(2, placar.hThreads, TRUE, INFINITE);
+  WaitForSingleObject(placar.hEventoTerminar, INFINITE);
+
   encerrarPlacar(&placar);
 
   return 0;
@@ -78,23 +79,12 @@ BOOL escreverRegistry(TCHAR *nomePipe) {
   return result == ERROR_SUCCESS;
 }
 
-BOOL initThreads(PLACAR *placar) {
-  placar->hThreads[0] = CreateThread(NULL, 0, threadComandos, placar, 0, NULL);
-  placar->hThreads[1] = CreateThread(NULL, 0, threadAlertas, placar, 0, NULL);
-
-  if (placar->hThreads[0] == NULL || placar->hThreads[1] == NULL) {
-    _tprintf(STR_ERRO_CRIAR_THREADS);
-    return FALSE;
-  }
-
-  return TRUE;
-}
-
 BOOL initEventos(PLACAR *placar) {
   placar->hEventoNotificar = CreateEvent(NULL, TRUE, FALSE, EVENTO_NOTIFICAR);
+  placar->hEventoCancelar = CreateEvent(NULL, TRUE, FALSE, NULL);
   placar->hEventoTerminar = CreateEvent(NULL, TRUE, FALSE, NULL);
 
-  if (placar->hEventoNotificar == NULL || placar->hEventoTerminar == NULL) {
+  if (placar->hEventoNotificar == NULL || placar->hEventoTerminar == NULL || placar->hEventoCancelar == NULL) {
     _tprintf(STR_ERRO_CRIAR_EVENTOS);
     return FALSE;
   }
@@ -119,9 +109,11 @@ DWORD WINAPI threadComandos(LPVOID param) {
     case CMD_LIGAR:
       ligarPlacar(placar);
       break;
+
     case CMD_DESLIGAR:
       desligarPlacar(placar);
       break;
+
     case CMD_DESCONHECIDO:
       _tprintf(STR_COMANDO_DESCONHECIDO);
       break;
@@ -148,12 +140,15 @@ DWORD WINAPI threadAlertas(LPVOID param) {
   HANDLE eventos[] = {
       placar->hEventoTerminar,
       placar->hEventoNotificar,
+
+      // apenas ativos quando está a decorrer um alerta
       placar->hTimer,
+      placar->hEventoCancelar
   };
 
   BOOL esperar_por_timer = FALSE;
   while (!placar->terminar) {
-    DWORD result = WaitForMultipleObjects(esperar_por_timer ? 3 : 2, eventos, FALSE, INFINITE);
+    DWORD result = WaitForMultipleObjects(esperar_por_timer ? 4 : 2, eventos, FALSE, INFINITE);
 
     // terminar
     if (result == WAIT_OBJECT_0) {
@@ -165,17 +160,8 @@ DWORD WINAPI threadAlertas(LPVOID param) {
     if (result == WAIT_OBJECT_0 + 1) {
       ResetEvent(placar->hEventoNotificar);
 
-      MSG_ALERTA alerta = {0};
-      if (!lerAlertaRegistry(placar->nomePipe, &alerta)) {
-        EnterCriticalSection(&placar->cs);
-        _tprintf(_T("\n"));
-        _tprintf(STR_ERRO_ALERTA_REGISTRY);
-        _tprintf(STR_CMD_INPUT);
-        LeaveCriticalSection(&placar->cs);
-        continue;
-      }
-
       EnterCriticalSection(&placar->cs);
+      MSG_ALERTA alerta = placar->alertaAtual;
       mostrarHora();
       _tprintf(STR_ALERTA, alerta.msg, alerta.duracao);
       _tprintf(STR_CMD_INPUT);
@@ -186,18 +172,38 @@ DWORD WINAPI threadAlertas(LPVOID param) {
     }
 
     // timer expirou
-    if (result == WAIT_OBJECT_0 + 2) {
-      ResetEvent(placar->hEventoNotificar);
-
+    if (esperar_por_timer && result == WAIT_OBJECT_0 + 2) {
       EnterCriticalSection(&placar->cs);
       mostrarHora();
       _tprintf(STR_ALERTA_FIM);
       _tprintf(STR_CMD_INPUT);
       LeaveCriticalSection(&placar->cs);
 
+      // envia fim de alerta ao central
+      if(placar->ligado) {
+          MSG_CMD fim = { .tipo = FIM_ALERTA };
+          DWORD escrito;
+          WriteFile(placar->hPipe, &fim, sizeof(MSG_CMD), &escrito, NULL);
+      }
+
       esperar_por_timer = FALSE;
       CancelWaitableTimer(placar->hTimer);
     }
+
+    // alerta cancelado pelo central
+    if (esperar_por_timer && result == WAIT_OBJECT_0 + 3) {
+      ResetEvent(placar->hEventoCancelar);
+
+      EnterCriticalSection(&placar->cs);
+      mostrarHora();
+      LOG("ALERTA CANCELADO");
+      _tprintf(STR_CMD_INPUT);
+      LeaveCriticalSection(&placar->cs);
+
+      esperar_por_timer = FALSE;
+      CancelWaitableTimer(placar->hTimer);
+    }
+
   }
 
   CloseHandle(placar->hTimer);
@@ -253,7 +259,6 @@ void ligarPlacar(PLACAR *placar) {
       0, //
       NULL); //
 
-  //TODO: WaitNamedPipe para esperar até haver uma instancia de pipe disponivel
   if (placar->hPipe == INVALID_HANDLE_VALUE) {
     _tprintf(STR_ERRO_LIGAR_CENTRAL, GetLastError());
     return;
@@ -281,38 +286,127 @@ void ligarPlacar(PLACAR *placar) {
   placar->identificador = resposta.identificador;
   placar->ligado = TRUE;
   _tprintf(STR_PLACAR_ID, placar->identificador);
+
+  // iniciar escuta da central
+  placar->hThreadEscutaCentral = CreateThread(NULL, 0, threadEscutaCentral, placar, 0, NULL);
+  if (placar->hThreadEscutaCentral == NULL) {
+    LOG("Erro ao iniciar a escuta da central.");
+  }
 }
 
 void desligarPlacar(PLACAR *placar) {
-  LOG("A desligar placar");
+  LOG("A enviar pedido de desligar à central...");
 
-  MSG_CMD msg = { .tipo = DESLIGAR };
+  if (placar->ligado && placar->hPipe && placar->hPipe != INVALID_HANDLE_VALUE) {
+    MSG_CMD msg = { .tipo = DESLIGAR };
+    DWORD escrito;
+    WriteFile(placar->hPipe, &msg, sizeof(MSG_CMD), &escrito, NULL);
+  } else {
+    // fallback
+    placar->terminar = TRUE;
+    SetEvent(placar->hEventoTerminar);
+  }
+}
 
-  DWORD escrito;
-  WriteFile(placar->hPipe, &msg, sizeof(MSG_CMD), &escrito, NULL);
 
-  MSG_CMD resposta = {0};
-  DWORD lido;
-  BOOL res;
+DWORD WINAPI threadEscutaCentral(LPVOID param) {
+  PLACAR* placar = (PLACAR*)param;
+  DWORD lido, escrito;
+  BYTE buffer[sizeof(MSG_ALERTA)] = {0}; // Buffer com o tamanho da maior mensagem
 
+  while(!placar->terminar && placar->ligado) {
+      BOOL res = ReadFile(placar->hPipe, buffer, sizeof(buffer), &lido, NULL);
 
-  res = ReadFile(placar->hPipe, &resposta, sizeof(MSG_CMD), &lido, NULL);
+      if (!res || lido == 0) {
+        if (!placar->terminar) {
+          LOG("Conexao ao central perdida");
+          placar->ligado = FALSE;
+          placar->terminar = TRUE;
+          SetEvent(placar->hEventoTerminar);
+        }
+        break;
+      }
 
-  if (res && resposta.tipo == DESLIGAR) {
-    LOG("Recebi confirmaçao desligar");
+      BYTE tipo = buffer[0];
+      switch(tipo) {
+          case DESLIGAR: {
+              LOG("A Desligar (confirmacao recebida)");
+              placar->terminar = TRUE;
+              placar->ligado = FALSE;
+              SetEvent(placar->hEventoTerminar);
+              break;
+          }
+          case NOVO_ALERTA: {
+              LOG("Novo Alerta!");
+              MSG_ALERTA *alerta = (MSG_ALERTA*)buffer;
+
+              // enviar confirmacao
+              WriteFile(placar->hPipe, alerta, sizeof(MSG_ALERTA), &escrito, NULL);
+
+              EnterCriticalSection(&placar->cs);
+              memcpy(&placar->alertaAtual, alerta, sizeof(MSG_ALERTA));
+              LeaveCriticalSection(&placar->cs);
+
+              SetEvent(placar->hEventoNotificar);
+              break;
+          }
+          case CANCELAR_ALERTA: {
+              LOG("Alerta cancelado");
+              MSG_CMD cmd = { .tipo = CANCELAR_ALERTA };
+
+              // enviar confirmacao
+              WriteFile(placar->hPipe, &cmd, sizeof(MSG_CMD), &escrito, NULL);
+              SetEvent(placar->hEventoCancelar);
+              break;
+          }
+          case ENCERRAR_PLATAFORMA: {
+              LOG("Encerramento Sistema...");
+              desligarPlacar(placar);
+              break;
+          }
+      }
+  }
+  return 0;
+}
+
+BOOL initThreads(PLACAR *placar) {
+  placar->hThreadComandos = CreateThread(NULL, 0, threadComandos, placar, 0, NULL);
+  placar->hThreadAlertas = CreateThread(NULL, 0, threadAlertas, placar, 0, NULL);
+
+  if (placar->hThreadComandos == NULL || placar->hThreadAlertas == NULL) {
+    _tprintf(STR_ERRO_CRIAR_THREADS);
+    return FALSE;
   }
 
-  placar->terminar = TRUE;
-  SetEvent(placar->hEventoTerminar);
-
-  _tprintf(STR_PLACAR_ENCERRAR);
+  return TRUE;
 }
 
 void encerrarPlacar(PLACAR *placar) {
-  if (placar->hThreads[0]) CloseHandle(placar->hThreads[0]);
-  if (placar->hThreads[1]) CloseHandle(placar->hThreads[1]);
+  if (placar->hThreadComandos) {
+    WaitForSingleObject(placar->hThreadComandos, 1000);
+    CloseHandle(placar->hThreadComandos);
+    placar->hThreadComandos = NULL;
+  }
+  
+  if (placar->hThreadAlertas) {
+    WaitForSingleObject(placar->hThreadAlertas, 1000);
+    CloseHandle(placar->hThreadAlertas);
+    placar->hThreadAlertas = NULL;
+  }
+
+  if (placar->hThreadEscutaCentral) {
+      if (placar->hPipe && placar->hPipe != INVALID_HANDLE_VALUE) {
+          CloseHandle(placar->hPipe);
+          placar->hPipe = NULL;
+      }
+      WaitForSingleObject(placar->hThreadEscutaCentral, 1000);
+      CloseHandle(placar->hThreadEscutaCentral);
+      placar->hThreadEscutaCentral = NULL;
+  }
+  
   if (placar->hEventoNotificar) CloseHandle(placar->hEventoNotificar);
   if (placar->hEventoTerminar) CloseHandle(placar->hEventoTerminar);
+  if (placar->hEventoCancelar) CloseHandle(placar->hEventoCancelar);
 
   DeleteCriticalSection(&placar->cs);
 }

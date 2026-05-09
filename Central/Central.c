@@ -10,21 +10,12 @@
 #include "Types.h"
 #include "Utils.h"
 
-// TODO:
-// - Adaptar reads e writes para receber/enviar respostas corretas consoante o tipo de pedido
-// - Mutex para as instancias dos placares
-// - Trocar tipos hardcoded por valores enum
 // - Limpar comentarios
 
 int _tmain(int argc, TCHAR *argv[]) {
   initConsola();
 
   CENTRAL central = {0};
-
-  //TODO: remove this later
-  char* fake_argv[] = { "Placar.exe", _T("tubo") };
-  argc = 2;
-  argv = fake_argv;
 
   if (!validarArgumentos(&central, argc, argv)) {
     ExitProcess(1);
@@ -33,10 +24,6 @@ int _tmain(int argc, TCHAR *argv[]) {
   if (!initCentral(&central)) {
     ExitProcess(1);
   }
-
-  // if (!criarPipe(&central)) {
-  //   ExitProcess(1);
-  // }
 
   if (!criarPipeInstances(&central)) {
     ExitProcess(1);
@@ -249,6 +236,67 @@ DWORD WINAPI threadComandos(LPVOID param) {
   return 0;
 }
 
+void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar) {
+  LOCK(central->hMutex);
+  BYTE tipo = placar->bufferPedido[0];
+  switch(tipo) {
+    case LIGAR:
+      placar->msg_por_enviar = TRUE;
+      placar->tipo_msg_enviar = LIGAR;
+      placar->estadoIO = ENVIA_RESPOSTA;
+      break;
+    case DESLIGAR:
+      placar->msg_por_enviar = TRUE;
+      placar->tipo_msg_enviar = DESLIGAR;
+      placar->estadoIO = ENVIA_RESPOSTA;
+      break;
+    case FIM_ALERTA:
+      LOG("Fim do alerta do placar %d", placar->id);
+      placar->temAlerta = FALSE;
+      placar->msg_por_enviar = FALSE;
+      placar->estadoIO = LE_PEDIDO;
+      break;
+    case NOVO_ALERTA:
+    case CANCELAR_ALERTA:
+      placar->msg_por_enviar = FALSE;
+      placar->estadoIO = LE_PEDIDO;
+      if(tipo == CANCELAR_ALERTA) placar->temAlerta = FALSE;
+      break;
+    default:
+      placar->msg_por_enviar = FALSE;
+      placar->estadoIO = LE_PEDIDO;
+  }
+  UNLOCK(central->hMutex);
+}
+
+void processarEscritaConcluida(CENTRAL *central, PLACAR_INFO *placar) {
+  LOG("Reposta enviada com sucesso");
+
+  LOCK(central->hMutex);
+  placar->msg_por_enviar = FALSE;
+  placar->estadoIO = LE_PEDIDO;
+
+  switch(placar->tipo_msg_enviar) {
+    case LIGAR:
+      MSG_ID *resposta = (MSG_ID*)placar->bufferResposta;
+      LOG("Nova conexão - Placar %d", resposta->identificador);
+      placar->id = resposta->identificador;
+      placar->ligado = TRUE;
+      central->numPlacares++;
+      break;
+
+    case DESLIGAR:
+      LOG("A desligar placar %d", placar->id);
+      placar->id = -1;
+      placar->ligado = FALSE;
+      placar->temAlerta = FALSE;
+      central->numPlacares--;
+      desconectarPlacar(central, placar);
+      break;
+  }
+  UNLOCK(central->hMutex);
+}
+
 DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param) {
   CENTRAL *central = param;
 
@@ -256,83 +304,84 @@ DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param) {
     _tprintf(STR_WAITING_CONNECTIONS_AND_REQUESTS);
     _tprintf(STR_CMD_INPUT);
 
-    DWORD indexEvento = WaitForMultipleObjects( //
-        MAX_PLACARES,                           // numero de eventos
-        central->hEvents,                       // array de event handles
-        FALSE,                                  // nao espera por todos
-        INFINITE);                              // infinito
+    DWORD indexEvento = WaitForMultipleObjects(
+        MAX_PLACARES,
+        central->hEvents,
+        FALSE, // n espera por todos
+        INFINITE);
 
     LOG("novo evento");
 
     int i = indexEvento - WAIT_OBJECT_0;
     if (i < 0 || i >= MAX_PLACARES) {
       _tprintf(STR_OUT_OF_RANGE);
-      continue; // TODO: handle erro?
+      continue;
     }
+
+    ResetEvent(central->hEvents[i]);
 
     DWORD bytesLidos = 0;
     BOOL res;
 
     // resultado de operações que ficaram pendentes
     if (central->placares[i].operacaoPendente) {
-      res = GetOverlappedResult(              //
-          central->placares[i].hPipeInstance, // hFile
-          &central->placares[i].olpInstance,  // *overlapped
-          &bytesLidos,                        // bytes transferidos
-          FALSE);                             // nao esperar
+      res = GetOverlappedResult(
+          central->placares[i].hPipeInstance,
+          &central->placares[i].olpInstance,
+          &bytesLidos,
+          FALSE);
 
       switch (central->placares[i].estadoIO) {
         case ESPERA_CONEXAO:
-          LOG("OPERACAO CONEXAO");
+          //LOG("OPERACAO CONEXAO CONCLUIDA");
           if (!res) {
             _tprintf(STR_OUT_OF_RANGE);
-            continue; // TODO: handle erro?
+            continue;
           }
-
           central->placares[i].estadoIO = LE_PEDIDO;
           break;
 
         case LE_PEDIDO:
-          LOG("OPERACAO LEITURA");
-          // desconexao ou erro
-          if (!res) {
-            desconectarPlacar(&central->placares[i]);
+          //LOG("OPERACAO LEITURA CONCLUIDA");
+          if (!res || bytesLidos == 0) {
+
+            // comando do utilizador para enviar
+            if (GetLastError() == ERROR_OPERATION_ABORTED && central->placares[i].msg_por_enviar) {
+              central->placares[i].operacaoPendente = FALSE;
+              central->placares[i].estadoIO = ENVIA_RESPOSTA;
+              break;
+            }
+
+            desconectarPlacar(central, &central->placares[i]);
             continue;
           }
-
-          central->placares[i].estadoIO = ENVIA_RESPOSTA;
+          central->placares[i].operacaoPendente = FALSE;
+          processarLeituraConcluida(central, &central->placares[i]);
           break;
 
         case ENVIA_RESPOSTA:
-          LOG("OPERACAO ESCRITA");
-          // desconexao ou erro
+          //LOG("OPERACAO ESCRITA CONCLUIDA");
           if (!res) {
-            desconectarPlacar(&central->placares[i]);
+            desconectarPlacar(central, &central->placares[i]);
             continue;
           }
-
-          central->placares[i].estadoIO = LE_PEDIDO;
+          central->placares[i].operacaoPendente = FALSE;
+          processarEscritaConcluida(central, &central->placares[i]);
           break;
       }
     }
 
     // realiza acao conforme o estado atual
     switch (central->placares[i].estadoIO) {
-      // ler request
       case LE_PEDIDO:
-        // TODO: lock mutex aqui?
         if(!handleMsgPlacarReceber(central, &central->placares[i])) {
-          desconectarPlacar(&central->placares[i]);
-          break;
+          desconectarPlacar(central, &central->placares[i]);
         }
         continue;
 
-      // enviar msg ao placar (pode ser resposta a pedido ou cmd do utilizador)
       case ENVIA_RESPOSTA:
-        // error
         if(!handleMsgPlacarEnviar(central, &central->placares[i])) {
-          desconectarPlacar(&central->placares[i]);
-          break;
+          desconectarPlacar(central, &central->placares[i]);
         }
         continue;
     }
@@ -341,90 +390,47 @@ DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param) {
   return 0;
 }
 
-// retorna falso se houver erro de leitura
 BOOL handleMsgPlacarReceber(CENTRAL *central, PLACAR_INFO *placar) {
   DWORD bytes_lidos;
 
-  BOOL res = ReadFile(                    //
-      placar->hPipeInstance, // instancia pipe
-      placar->bufferPedido,  // buffer onde recebemos o pedido
-      MAX_BUF * sizeof(TCHAR),            // max size do pedido
-      &bytes_lidos,                       // numero de bytes lidos
-      &placar->olpInstance); // estrutura overlapped
+  // limpar o overlap antes de voltar a usar
+  HANDLE tempEvent = placar->olpInstance.hEvent;
+  memset(&placar->olpInstance, 0, sizeof(OVERLAPPED));
+  placar->olpInstance.hEvent = tempEvent;
+
+  BOOL res = ReadFile(
+      placar->hPipeInstance,
+      placar->bufferPedido,
+      MAX_BUF * sizeof(TCHAR),
+      &bytes_lidos,
+      &placar->olpInstance);
 
   if (res && bytes_lidos != 0) {
-    // read completou
     placar->operacaoPendente = FALSE;
-
-    BYTE tipo = placar->bufferPedido[0];
-    switch(tipo) {
-      case LIGAR:
-        LOG("placar conectado");
-        placar->msg_por_enviar = TRUE;
-        placar->tipo_msg_enviar = LIGAR;
-
-        placar->estadoIO = ENVIA_RESPOSTA;
-        break;
-
-      case DESLIGAR:
-        LOG("placar %d desligado", placar->id);
-        placar->msg_por_enviar = TRUE;
-        placar->tipo_msg_enviar = DESLIGAR;
-
-        placar->estadoIO = ENVIA_RESPOSTA;
-        break;
-
-      case FIM_ALERTA:
-        LOG("Fim do alerta do placar %d", placar->id);
-        placar->temAlerta = FALSE;
-        placar->msg_por_enviar = FALSE;
-        placar->estadoIO = LE_PEDIDO;
-        break;
-
-      case NOVO_ALERTA:
-        LOG("Confirmacao alerta recebido, placar %d", placar->id);
-        placar->msg_por_enviar = FALSE;
-        placar->estadoIO = LE_PEDIDO;
-        break;
-
-      case CANCELAR_ALERTA:
-        LOG("Confirmacao cancelamento alerta recebido, placar %d", placar->id);
-        placar->msg_por_enviar = FALSE;
-        placar->temAlerta = FALSE;
-        placar->estadoIO = LE_PEDIDO;
-        break;
-
-      default:
-        LOG("Tipo de mensagem desconhecido...");
-        placar->msg_por_enviar = FALSE;
-        placar->estadoIO = LE_PEDIDO;
-    }
-
+    processarLeituraConcluida(central, placar);
     return TRUE;
   }
 
-  // operacao read em espera
   if (!res && (GetLastError() == ERROR_IO_PENDING)) {
     placar->operacaoPendente = TRUE;
     return TRUE;
   }
 
-  // se chegámos aqui, houve um erro
   return FALSE;
 }
 
-// retorna falso se houve erro de escrita
 BOOL handleMsgPlacarEnviar(CENTRAL *central, PLACAR_INFO *placar) {
+  LOCK(central->hMutex);
   if(!placar->msg_por_enviar) {
     placar->operacaoPendente = FALSE;
     placar->estadoIO = LE_PEDIDO;
+    UNLOCK(central->hMutex);
     return TRUE;
   }
 
-  // atualiza dados para enviar ao placar
-  // nota: talvez faça mais sentido fazer isto logo que recebemos a mensagem?
   switch(placar->tipo_msg_enviar) {
-    case LIGAR:
+    case LIGAR: {
+      LOG("A atribuir identificador");
       MSG_ID resposta = {
         .tipo = ATRIBUIR_IDENTIFICADOR,
         .identificador = central->proximoId++
@@ -432,67 +438,80 @@ BOOL handleMsgPlacarEnviar(CENTRAL *central, PLACAR_INFO *placar) {
       memcpy(placar->bufferResposta, &resposta, sizeof(resposta));
       placar->bytesResposta = sizeof(resposta);
       break;
-
-    case DESLIGAR:
-      // envia msg de confirmaçao de volta
-      memcpy(placar->bufferResposta, &placar->bufferPedido, sizeof(MSG_CMD));
+    }
+    case DESLIGAR: {
+      LOG("A enviar msg desligar");
+      memcpy(placar->bufferResposta, placar->bufferPedido, sizeof(MSG_CMD));
       placar->bytesResposta = sizeof(MSG_CMD);
       break;
-
+    }
+    case NOVO_ALERTA: {
+      LOG("A enviar alerta");
+      MSG_ALERTA alerta = { .tipo = NOVO_ALERTA, .duracao = placar->duracaoAlerta };
+      _tcscpy_s(alerta.msg, TAM_MSG, placar->msgAlerta);
+      memcpy(placar->bufferResposta, &alerta, sizeof(MSG_ALERTA));
+      placar->bytesResposta = sizeof(MSG_ALERTA);
+      break;
+    }
+    case CANCELAR_ALERTA: {
+      LOG("A cancelar alerta");
+      MSG_CMD cmd = { .tipo = CANCELAR_ALERTA };
+      memcpy(placar->bufferResposta, &cmd, sizeof(MSG_CMD));
+      placar->bytesResposta = sizeof(MSG_CMD);
+      break;
+    }
+    case ENCERRAR_PLATAFORMA: {
+      LOG("A encerrar plataforma");
+      MSG_CMD cmd = { .tipo = ENCERRAR_PLATAFORMA };
+      memcpy(placar->bufferResposta, &cmd, sizeof(MSG_CMD));
+      placar->bytesResposta = sizeof(MSG_CMD);
+      break;
+    }
     default:
+      UNLOCK(central->hMutex);
       return TRUE;
   }
 
-
-  LOG("A Enviar resposta...");
+  UNLOCK(central->hMutex);
 
   DWORD bytes_escritos = 0;
-  BOOL res = WriteFile(                    //
-      placar->hPipeInstance,  //
-      placar->bufferResposta, //
-      placar->bytesResposta,  //
-      &bytes_escritos,                     //
-      &placar->olpInstance);   //
 
+  // limpar o overlap antes de voltar a usar
+  HANDLE tempEvent = placar->olpInstance.hEvent;
+  memset(&placar->olpInstance, 0, sizeof(OVERLAPPED));
+  placar->olpInstance.hEvent = tempEvent;
 
-  // escrita completou
+  BOOL res = WriteFile(
+      placar->hPipeInstance,
+      placar->bufferResposta,
+      placar->bytesResposta,
+      &bytes_escritos,
+      &placar->olpInstance);
+
   if (res && bytes_escritos == placar->bytesResposta) {
-    LOG("Reposta enviada com sucesso");
-    placar->msg_por_enviar = FALSE;
     placar->operacaoPendente = FALSE;
-    placar->estadoIO = LE_PEDIDO;
-
-    // atualizar dados internoss
-    switch(placar->tipo_msg_enviar) {
-      case LIGAR:
-        MSG_ID *resposta = (MSG_ID*)placar->bufferResposta;
-        placar->id = resposta->identificador;
-        placar->ligado = TRUE;
-        break;
-      case DESLIGAR:
-        // libertar instancia do pipe para uma nova conexão
-        placar->id = -1;
-        placar->ligado = FALSE;
-        desconectarPlacar(placar);
-        break;
-    }
-
+    processarEscritaConcluida(central, placar);
     return TRUE;
   }
 
-  // msg por enviar
   if (!res && (GetLastError() == ERROR_IO_PENDING)) {
     placar->operacaoPendente = TRUE;
     placar->msg_por_enviar = TRUE;
     return TRUE;
   }
 
-  // erro se chegarmos aqui
   return FALSE;
 }
 
-void desconectarPlacar(PLACAR_INFO *placar) {
+void desconectarPlacar(CENTRAL *central, PLACAR_INFO *placar) {
   DisconnectNamedPipe(placar->hPipeInstance);
+
+  if (placar->ligado) {
+    placar->ligado = FALSE;
+    central->numPlacares--;
+    placar->id = -1;
+    placar->temAlerta = FALSE;
+  }
 
   // reutiliza instancia do pipe para nova conexao
   criaConexao(placar);
@@ -585,32 +604,23 @@ BOOL cmdEnviarAlerta(CENTRAL *central, TCHAR *args) {
   DWORD id = (DWORD)_ttoi(sId);
 
   MSG_ALERTA alerta = {0};
-  alerta.tipo = 4;
+  alerta.tipo = NOVO_ALERTA;
   alerta.duracao = duracao;
   _tcscpy_s(alerta.msg, TAM_MSG, msg);
 
-  if (id == 0)
-    enviarTodos(central, &alerta, sizeof(MSG_ALERTA));
-  else if (!enviarPlacar(central, id, &alerta, sizeof(MSG_ALERTA))) {
-    _tprintf(STR_PLACAR_NAO_ENCONTRADO, id);
-    return FALSE;
-  }
-
-
   WaitForSingleObject(central->hMutex, INFINITE);
 
-  for (int i = 0; i < central->numPlacares; i++) {
+  for (int i = 0; i < MAX_PLACARES; i++) {
     if ((id == 0 || central->placares[i].id == id) && central->placares[i].ligado) {
       central->placares[i].temAlerta = TRUE;
       central->placares[i].duracaoAlerta = duracao;
       _tcscpy_s(central->placares[i].msgAlerta, TAM_MSG, msg);
 
-      // TODO: 
-      // - lancar evento para o placar
-      // - meter operacao pendente a falso
-      // - placar->msg_a_enviar = TRUE;
-      // - placar->tipo_msg_enviar = ALERTA;
-      // - placar->alerta_a_enviar = .{...};
+
+      // set dados da mensagem e acordar o WaitForMultipleObjects
+      central->placares[i].msg_por_enviar = TRUE;
+      central->placares[i].tipo_msg_enviar = NOVO_ALERTA;
+      CancelIoEx(central->placares[i].hPipeInstance, &central->placares[i].olpInstance);
     }
   }
   ReleaseMutex(central->hMutex);
@@ -618,69 +628,32 @@ BOOL cmdEnviarAlerta(CENTRAL *central, TCHAR *args) {
   return TRUE;
 }
 
-BOOL enviarPlacar(CENTRAL *central, int id, void *msg, int size) {
-  return FALSE;
-  //
-  // WaitForSingleObject(central->hMutex, INFINITE);
-  //
-  // for (int i = 0; i < central->numPlacares; i++) {
-  //
-  //   if (central->placares[i].id == id && central->placares[i].ligado) {
-  //
-  //     DWORD escrito;
-  //     WriteFile(central->placares[i].hPipe, msg, size, &escrito, NULL);
-  //
-  //     ReleaseMutex(central->hMutex);
-  //     return TRUE;
-  //   }
-  // }
-  //
-  // ReleaseMutex(central->hMutex);
-  // return FALSE;
-}
-
-void enviarTodos(CENTRAL *central, void *msg, int size) {
-
-  // WaitForSingleObject(central->hMutex, INFINITE);
-  //
-  // for (int i = 0; i < central->numPlacares; i++) {
-  //
-  //   if (central->placares[i].ligado) {
-  //
-  //     DWORD escrito;
-  //     WriteFile(central->placares[i].hPipe, msg, size, &escrito, NULL);
-  //   }
-  // }
-  //
-  // ReleaseMutex(central->hMutex);
-}
-
 BOOL cmdCancelarAlerta(CENTRAL *central, TCHAR *args) {
   if (args == NULL) {
-    _tprintf(STR_CMD_CANCELAR_ERRO);
+    _tprintf(STR_CMD_CANCEL_ALERTA_ERRO);
     return FALSE;
   }
 
   DWORD id = (DWORD)_ttoi(args);
 
-  MSG_CMD msg = {0};
-  msg.tipo = 5;
+  MSG_CMD msg = {.tipo = CANCELAR_ALERTA};
 
   if (id == 0) {
-    _tprintf(STR_CMD_CANCELAR_ERRO);
-    return FALSE;
-  }
-
-  if (!enviarPlacar(central, id, &msg, sizeof(MSG_CMD))) {
-    _tprintf(STR_PLACAR_NAO_ENCONTRADO, id);
+    _tprintf(STR_CMD_CANCEL_ALERTA_ERRO);
     return FALSE;
   }
 
   WaitForSingleObject(central->hMutex, INFINITE);
-  for (int i = 0; i < central->numPlacares; i++) {
+  for (int i = 0; i < MAX_PLACARES; i++) {
     if (central->placares[i].id == id && central->placares[i].ligado) {
       central->placares[i].temAlerta = FALSE;
       ZeroMemory(central->placares[i].msgAlerta, sizeof(central->placares[i].msgAlerta));
+
+
+      // set dados da mensagem e acordar o WaitForMultipleObjects
+      central->placares[i].msg_por_enviar = TRUE;
+      central->placares[i].tipo_msg_enviar = CANCELAR_ALERTA;
+      CancelIoEx(central->placares[i].hPipeInstance, &central->placares[i].olpInstance);
     }
   }
   ReleaseMutex(central->hMutex);
@@ -694,7 +667,7 @@ BOOL cmdListarPlacares(CENTRAL *central) {
 
   _tprintf(STR_PLACARES_ATIVOS, central->numPlacares);
 
-  for (int i = 0; i < central->numPlacares; i++) {
+  for (int i = 0; i < MAX_PLACARES; i++) {
     if (central->placares[i].ligado) {
       _tprintf(STR_INFO_PLACAR, central->placares[i].id,
           central->placares[i].temAlerta ? central->placares[i].msgAlerta : STR_EMPTY);
@@ -718,108 +691,29 @@ BOOL cmdListarComandos() {
 }
 
 BOOL cmdEncerrarCentral(CENTRAL *central) {
-  MSG_CMD msg = {0};
-  msg.tipo = 6;
-  enviarTodos(central, &msg, sizeof(MSG_CMD));
+  MSG_CMD msg = {.tipo = ENCERRAR_PLATAFORMA};
 
   _tprintf(STR_CENTRAL_ENCERRAR);
 
-  // TODO
-  //
-  // WaitForSingleObject(central->hMutex, INFINITE);
-  // for (int i = 0; i < central->numPlacares; i++) {
-  //   if (central->placares[i].hThread) {
-  //     WaitForSingleObject(central->placares[i].hThread, 5000);
-  //     CloseHandle(central->placares[i].hThread);
-  //     central->placares[i].hThread = NULL;
-  //   }
-  // }
-  // ReleaseMutex(central->hMutex);
+  WaitForSingleObject(central->hMutex, INFINITE);
+  central->terminar = TRUE;
+
+  for (int i = 0; i < MAX_PLACARES; i++) {
+    if (central->placares[i].ligado) {
+      central->placares[i].msg_por_enviar = TRUE;
+      central->placares[i].tipo_msg_enviar = ENCERRAR_PLATAFORMA;
+      CancelIoEx(central->placares[i].hPipeInstance, &central->placares[i].olpInstance);
+    } else if (central->hEvents[i]) {
+      // Acordar slots vazios para que o loop while avalie a flag terminar
+      SetEvent(central->hEvents[i]); 
+    }
+  }
+  ReleaseMutex(central->hMutex);
 
   terminarCentral(central);
   ExitProcess(0);
 
   return TRUE;
-}
-
-DWORD WINAPI threadPlacar(LPVOID param) {
-  // THREAD_PLACAR_ARGS *args = (THREAD_PLACAR_ARGS *)param;
-  // CENTRAL *central = args->central;
-  // int idx = args->index;
-  // free(args);
-  //
-  // HANDLE hPipe = central->placares[idx].hPipe;
-  // BYTE tipo;
-  // DWORD lido;
-  // BOOL ativo = TRUE;
-  //
-  // while (!central->terminar && ativo) {
-  //
-  //   BOOL ok = ReadFile(hPipe, &tipo, sizeof(BYTE), &lido, NULL);
-  //
-  //   if (!ok || lido == 0) {
-  //     _tprintf(STR_PLACAR_DESCONECTADO, central->placares[idx].id);
-  //     break;
-  //   }
-  //
-  //   switch (tipo) {
-  //   case 1:
-  //     processarLigar(central, idx);
-  //     break;
-  //   case 2:
-  //     processarDesligar(central, idx, &ativo);
-  //     break;
-  //   case 3:
-  //     processarFimAlerta(central, idx);
-  //     break;
-  //   case 4:
-  //     processarConfirmacaoAlerta(central, idx, hPipe);
-  //     break;
-  //   case 5:
-  //     processarConfirmacaoCancelar(central, idx, hPipe);
-  //     break;
-  //   default:
-  //     _tprintf(STR_ERRO_MSG, tipo);
-  //     break;
-  //   }
-  // }
-  //
-  // DisconnectNamedPipe(hPipe);
-  // CloseHandle(hPipe);
-  // return 0;
-}
-void processarLigar(CENTRAL *central, int idx) {
-
-  // WaitForSingleObject(central->hMutex, INFINITE);
-  // central->placares[idx].id = central->proximoId++;
-  // central->placares[idx].ligado = TRUE;
-  // DWORD id = central->placares[idx].id;
-  // ReleaseMutex(central->hMutex);
-  //
-  // MSG_ID resposta = {0};
-  // resposta.tipo = 7;
-  // resposta.identificador = id;
-  //
-  // DWORD escrito;
-  // WriteFile(central->placares[idx].hPipe, &resposta, sizeof(MSG_ID), &escrito, NULL);
-  //
-  // _tprintf(STR_PLACAR_LIGADO, id);
-}
-
-void processarDesligar(CENTRAL *central, int idx, BOOL *ativo) {
-  // MSG_CMD confirmacao = {0};
-  // confirmacao.tipo = 2;
-  //
-  // DWORD escrito;
-  // WriteFile(central->placares[idx].hPipe, &confirmacao, sizeof(MSG_CMD), &escrito, NULL);
-  //
-  // WaitForSingleObject(central->hMutex, INFINITE);
-  // central->placares[idx].ligado = FALSE;
-  // central->placares[idx].temAlerta = FALSE;
-  // ReleaseMutex(central->hMutex);
-  //
-  // _tprintf(STR_PLACAR_DESLIGADO, central->placares[idx].id);
-  // *ativo = FALSE;
 }
 
 void processarFimAlerta(CENTRAL *central, int idx) {
@@ -853,10 +747,15 @@ void terminarCentral(CENTRAL *central) {
   if (central->hThreads[0]) CloseHandle(central->hThreads[0]);
   if (central->hThreads[1]) CloseHandle(central->hThreads[1]);
   if (central->hMutex) CloseHandle(central->hMutex);
-  // if (central->hPipe) CloseHandle(central->hPipe);
 
-  // TODO
-  // for (int i = 0; i < central->numPlacares; i++) {
-  //   if (central->placares[i].hPipe) CloseHandle(central->placares[i].hPipe);
-  // }
+  for (int i = 0; i < MAX_PLACARES; i++) {
+    if (central->placares[i].hPipeInstance) {
+      DisconnectNamedPipe(central->placares[i].hPipeInstance);
+      CloseHandle(central->placares[i].hPipeInstance);
+    }
+
+    if (central->hEvents[i]) {
+      CloseHandle(central->hEvents[i]);
+    }
+  }
 }

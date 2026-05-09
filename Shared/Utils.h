@@ -5,6 +5,8 @@
 #define _UNICODE
 
 #define LOG(str) _tprintf(_T(str)); _tprintf("\n")
+#define LOCK(mutex) WaitForSingleObject(mutex, INFINITE)
+#define UNLOCK(mutex) ReleaseMutex(mutex)
 
 #include <fcntl.h>
 #include <io.h>

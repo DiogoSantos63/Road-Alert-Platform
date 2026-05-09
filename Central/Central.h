@@ -63,9 +63,7 @@ DWORD WINAPI threadComandos(LPVOID param);
 
 DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param);
 
-//void updateResposta(CENTRAL *central, PLACAR_INFO *placar);
-
-void desconectarPlacar(PLACAR_INFO *placar);
+void desconectarPlacar(CENTRAL *central, PLACAR_INFO *placar);
 
 BOOL handleMsgPlacarReceber(CENTRAL *central, PLACAR_INFO *placar);
 
@@ -88,6 +86,8 @@ BOOL cmdListarPlacares(CENTRAL *central);
 BOOL cmdListarComandos();
 
 BOOL cmdEncerrarCentral(CENTRAL *central);
+
+void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar);
 
 void processarLigar(CENTRAL *central, int idx);
 
