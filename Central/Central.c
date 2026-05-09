@@ -275,7 +275,7 @@ void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar) {
 }
 
 void processarEscritaConcluida(CENTRAL *central, PLACAR_INFO *placar) {
-  LOG("Reposta enviada com sucesso");
+  LOG("Mensagem enviada com sucesso");
 
   LOCK(central->hMutex);
   placar->msg_por_enviar = FALSE;
@@ -284,24 +284,24 @@ void processarEscritaConcluida(CENTRAL *central, PLACAR_INFO *placar) {
   switch(placar->tipo_msg_enviar) {
     case LIGAR:
       MSG_ID *resposta = (MSG_ID*)placar->bufferResposta;
-
       placar->id = resposta->identificador;
 
-      LOG("Nova conexão - Placar %d", placar->id);
+      LOG("Placar ligado - id: %d", placar->id);
 
       placar->ligado = TRUE;
       central->numPlacares++;
       break;
 
+    case ENCERRAR_PLATAFORMA:
     case DESLIGAR:
-      LOG("A desligar placar %d", placar->id);
+      LOG("Placar desligado - id: %d", placar->id);
       //FlushFileBuffers(placar->hPipeInstance);
 
       placar->id = -1;
       placar->ligado = FALSE;
       placar->temAlerta = FALSE;
       central->numPlacares--;
-      //desconectarPlacar(central, placar);
+      desconectarPlacar(central, placar);
       break;
   }
   UNLOCK(central->hMutex);
@@ -310,9 +310,25 @@ void processarEscritaConcluida(CENTRAL *central, PLACAR_INFO *placar) {
 DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param) {
   CENTRAL *central = param;
 
-  while (!central->terminar) {
-    _tprintf(STR_WAITING_CONNECTIONS_AND_REQUESTS);
-    _tprintf(STR_CMD_INPUT);
+  while (TRUE) {
+    // condicao de encerramento
+    if (central->terminar) {
+      BOOL prontoASair = TRUE;
+      for (int k = 0; k < MAX_PLACARES; k++) {
+        if (central->placares[k].ligado || central->placares[k].operacaoPendente) {
+          prontoASair = FALSE;
+          break;
+        }
+      }
+      if (prontoASair) {
+        LOG("Todos os placares terminados. A sair da thread de I/O.");
+        break;
+      }
+    } else {
+      _tprintf(STR_WAITING_CONNECTIONS_AND_REQUESTS);
+      _tprintf(STR_CMD_INPUT);
+    }
+
 
     DWORD indexEvento = WaitForMultipleObjects(
         MAX_PLACARES,
@@ -320,11 +336,9 @@ DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param) {
         FALSE, // n espera por todos
         INFINITE);
 
-    LOG("novo evento");
-
     int i = indexEvento - WAIT_OBJECT_0;
     if (i < 0 || i >= MAX_PLACARES) {
-      _tprintf(STR_OUT_OF_RANGE);
+        _tprintf(STR_OUT_OF_RANGE);
       continue;
     }
 
@@ -345,7 +359,13 @@ DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param) {
         case ESPERA_CONEXAO:
           //LOG("OPERACAO CONEXAO CONCLUIDA");
           if (!res) {
-            _tprintf(STR_OUT_OF_RANGE);
+            if(GetLastError() == ERROR_OPERATION_ABORTED) {
+              // encerramento sistema
+              central->placares[i].operacaoPendente = FALSE;
+              break;
+            }
+
+            LOG("Erro desconhecido");
             continue;
           }
           central->placares[i].estadoIO = LE_PEDIDO;
@@ -394,6 +414,9 @@ DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param) {
           desconectarPlacar(central, &central->placares[i]);
         }
         continue;
+
+      default:
+        continue;
     }
   }
 
@@ -440,7 +463,7 @@ BOOL handleMsgPlacarEnviar(CENTRAL *central, PLACAR_INFO *placar) {
 
   switch(placar->tipo_msg_enviar) {
     case LIGAR: {
-      LOG("A atribuir identificador");
+      LOG("A enviar identificador");
       MSG_ID resposta = {
         .tipo = ATRIBUIR_IDENTIFICADOR,
         .identificador = central->proximoId++
@@ -471,7 +494,7 @@ BOOL handleMsgPlacarEnviar(CENTRAL *central, PLACAR_INFO *placar) {
       break;
     }
     case ENCERRAR_PLATAFORMA: {
-      LOG("A encerrar plataforma");
+      LOG("A enviar comando encerrar");
       MSG_CMD cmd = { .tipo = ENCERRAR_PLATAFORMA };
       memcpy(placar->bufferResposta, &cmd, sizeof(MSG_CMD));
       placar->bytesResposta = sizeof(MSG_CMD);
@@ -521,10 +544,14 @@ void desconectarPlacar(CENTRAL *central, PLACAR_INFO *placar) {
     central->numPlacares--;
     placar->id = -1;
     placar->temAlerta = FALSE;
+    placar->operacaoPendente = FALSE;
   }
 
   // reutiliza instancia do pipe para nova conexao
-  criaConexao(placar);
+  // a nao ser que esteja a terminar
+  if (!central->terminar) {
+    criaConexao(placar);
+  }
 }
 
 
@@ -706,22 +733,19 @@ BOOL cmdEncerrarCentral(CENTRAL *central) {
   _tprintf(STR_CENTRAL_ENCERRAR);
 
   WaitForSingleObject(central->hMutex, INFINITE);
+
   central->terminar = TRUE;
 
   for (int i = 0; i < MAX_PLACARES; i++) {
     if (central->placares[i].ligado) {
       central->placares[i].msg_por_enviar = TRUE;
       central->placares[i].tipo_msg_enviar = ENCERRAR_PLATAFORMA;
-      CancelIoEx(central->placares[i].hPipeInstance, &central->placares[i].olpInstance);
-    } else if (central->hEvents[i]) {
-      // Acordar slots vazios para que o loop while avalie a flag terminar
-      SetEvent(central->hEvents[i]); 
     }
+
+    // Acordar instancias do pipe
+    CancelIoEx(central->placares[i].hPipeInstance, &central->placares[i].olpInstance);
   }
   ReleaseMutex(central->hMutex);
-
-  terminarCentral(central);
-  ExitProcess(0);
 
   return TRUE;
 }

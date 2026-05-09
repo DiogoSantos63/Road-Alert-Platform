@@ -112,7 +112,7 @@ DWORD WINAPI threadComandos(LPVOID param) {
       break;
 
     case CMD_DESLIGAR:
-      desligarPlacar(placar);
+      desligarPlacar(placar, TRUE);
       break;
 
     case CMD_DESCONHECIDO:
@@ -295,7 +295,7 @@ void ligarPlacar(PLACAR *placar) {
   }
 }
 
-void desligarPlacar(PLACAR *placar) {
+void desligarPlacar(PLACAR *placar, BOOL comConfirmacao) {
   if(placar->terminar == TRUE){
     // ja foi enviado pedido de desligar
     return;
@@ -303,12 +303,13 @@ void desligarPlacar(PLACAR *placar) {
 
   LOG("A desligar...");
 
-  if (placar->ligado && placar->hPipe && placar->hPipe != INVALID_HANDLE_VALUE) {
+  // desbloquear thread de escuta
+  CancelSynchronousIo(placar->hThreadEscutaCentral);
+
+  if (comConfirmacao) {
     MSG_CMD msg = { .tipo = DESLIGAR };
     DWORD escrito, lido;
 
-    // desbloquear READ para podermos fazer o write, sem ter de usar overlapped IO
-    CancelSynchronousIo(placar->hThreadEscutaCentral);
     BOOL res = WriteFile(placar->hPipe, &msg, sizeof(MSG_CMD), &escrito, NULL);
 
     if(res == 0 || escrito != sizeof(msg)) {
@@ -349,7 +350,10 @@ DWORD WINAPI threadEscutaCentral(LPVOID param) {
           placar->ligado = FALSE;
           placar->terminar = TRUE;
           SetEvent(placar->hEventoTerminar);
+          break;
         }
+
+        LOG("Erro desconhecido");
         break;
       }
 
@@ -384,7 +388,7 @@ DWORD WINAPI threadEscutaCentral(LPVOID param) {
           }
           case ENCERRAR_PLATAFORMA: {
               LOG("Encerramento Sistema...");
-              desligarPlacar(placar);
+              desligarPlacar(placar, FALSE);
               break;
           }
       }

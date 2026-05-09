@@ -49,7 +49,7 @@ COMANDO parsearComando(TCHAR *cmd);
 
 void ligarPlacar(PLACAR *placar);
 
-void desligarPlacar(PLACAR *placar);
+void desligarPlacar(PLACAR *placar, BOOL comConfirmacao);
 
 void mostrarHora();
 
