@@ -11,11 +11,9 @@
 #include "Utils.h"
 
 //TODO: 
-// - validar input do comando alerta
+// - validar input do comando alerta (nao permitir duracoes negativas)
 // - permitir alerta com aspas
 // - fix do print dos ids
-// - fix de mostar os alertas ativos para cada placar
-// - Limpar comentarios
 
 int _tmain(int argc, TCHAR *argv[]) {
   initConsola();
@@ -151,23 +149,6 @@ BOOL criaConexao(PLACAR_INFO *placar) {
   }
 
   return TRUE;
-}
-
-BOOL criarPipe(CENTRAL *central) {
-  return FALSE;
-
-  // central->hPipe =
-  //     CreateNamedPipe(central->nomePipe, PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-  //                     MAX_PLACARES, 1024, 1024, 0, NULL);
-  //
-  // if (central->hPipe == INVALID_HANDLE_VALUE) {
-  //   _tprintf(STR_NAMED_PIPE_CREATION, GetLastError());
-  //   return FALSE;
-  // }
-  //
-  // _tprintf(STR_CENTRAL_ACTIVE);
-  //
-  // return TRUE;
 }
 
 BOOL initThreads(CENTRAL *central) {
@@ -559,78 +540,6 @@ void desconectarPlacar(CENTRAL *central, PLACAR_INFO *placar) {
   if (!central->terminar) {
     criaConexao(placar);
   }
-}
-
-
-// void updateResposta(CENTRAL *central, PLACAR_INFO *placar) {
-  // BYTE tipo = placar->bufferPedido[0];
-  // switch(tipo) {
-  //   case LIGAR: 
-  //
-  //   case DESLIGAR: 
-  //
-  //   case FIM_ALERTA:
-  //     LOG("FIM ALERTA placar %d", placar->id);
-  //     // nao precisamos de enviar nada
-  //     break;
-  //
-  //   default:
-  //     LOG("Tipo de pedido desconhecido");
-  //
-  // }
-
-  // _tcscpy_s(placar->bufferResposta, MAX_BUF, _T("RESPOSTA"));
-  // placar->bytesResposta = _tcslen(placar->bufferResposta); // tamanho da resposta a enviar
-// }
-
-DWORD WINAPI threadPlacares(LPVOID param) {
-  // CENTRAL *central = (CENTRAL *)param;
-  //
-  // while (!central->terminar) {
-  //   _tprintf(STR_WAITING_CONNECTION);
-  //   _tprintf(STR_CMD_INPUT);
-  //
-  //   BOOL ligado = ConnectNamedPipe(central->hPipe, NULL);
-  //
-  //   if (!ligado && GetLastError() != ERROR_PIPE_CONNECTED) {
-  //     _tprintf(STR_ERRO_CONNECT_PIPE, GetLastError());
-  //     continue;
-  //   }
-  //
-  //   WaitForSingleObject(central->hMutex, INFINITE);
-  //
-  //   if (central->numPlacares >= MAX_PLACARES) {
-  //     ReleaseMutex(central->hMutex);
-  //     _tprintf(STR_ERRO_MAX_PLACARES);
-  //     DisconnectNamedPipe(central->hPipe);
-  //     continue;
-  //   }
-  //
-  //   int index = central->numPlacares;
-  //   central->placares[index].hPipe = central->hPipe;
-  //   central->placares[index].ligado = TRUE;
-  //   central->placares[index].id = 0;
-  //   central->numPlacares++;
-  //
-  //   ReleaseMutex(central->hMutex);
-  //
-  //   THREAD_PLACAR_ARGS *args = malloc(sizeof(THREAD_PLACAR_ARGS));
-  //   args->central = central;
-  //   args->index = index;
-  //
-  //   central->placares[index].hThread = CreateThread(NULL, 0, threadPlacar, args, 0, NULL);
-  //
-  //   central->hPipe =
-  //       CreateNamedPipe(central->nomePipe, PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-  //                       MAX_PLACARES, 1024, 1024, 0, NULL);
-  //
-  //   if (central->hPipe == INVALID_HANDLE_VALUE) {
-  //     _tprintf(STR_NAMED_PIPE_CREATION, GetLastError());
-  //     break;
-  //   }
-  // }
-  //
-  // return 0;
 }
 
 BOOL cmdEnviarAlerta(CENTRAL *central, TCHAR *args) {
