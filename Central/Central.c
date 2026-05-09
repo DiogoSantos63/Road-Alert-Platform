@@ -612,7 +612,7 @@ BOOL cmdCancelarAlerta(CENTRAL *central, TCHAR *args) {
 
   WaitForSingleObject(central->hMutex, INFINITE);
   for (int i = 0; i < MAX_PLACARES; i++) {
-    if ((id == 0 || central->placares[i].id == id) && central->placares[i].ligado) {
+    if (central->placares[i].id == id && central->placares[i].ligado) {
       central->placares[i].temAlerta = FALSE;
       ZeroMemory(central->placares[i].msgAlerta, sizeof(central->placares[i].msgAlerta));
 

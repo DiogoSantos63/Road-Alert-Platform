@@ -54,8 +54,6 @@ BOOL validarArgumentos(CENTRAL *central, int argc, TCHAR *argv[]);
 
 BOOL initCentral(CENTRAL *central);
 
-BOOL criarPipe(CENTRAL *central);
-
 BOOL initThreads(CENTRAL *central);
 
 COMANDO parsearComando(TCHAR *cmd);
@@ -70,15 +68,7 @@ BOOL handleMsgPlacarReceber(CENTRAL *central, PLACAR_INFO *placar);
 
 BOOL handleMsgPlacarEnviar(CENTRAL *central, PLACAR_INFO *placar);
 
-DWORD WINAPI threadPlacares(LPVOID param);
-
-DWORD WINAPI threadPlacar(LPVOID param);
-
 BOOL cmdEnviarAlerta(CENTRAL *central, TCHAR *args);
-
-BOOL enviarPlacar(CENTRAL *central, int id, void *msg, int size);
-
-void enviarTodos(CENTRAL *central, void *msg, int size);
 
 BOOL cmdCancelarAlerta(CENTRAL *central, TCHAR *args);
 
@@ -89,10 +79,6 @@ BOOL cmdListarComandos();
 BOOL cmdEncerrarCentral(CENTRAL *central);
 
 void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar);
-
-void processarLigar(CENTRAL *central, int idx);
-
-void processarDesligar(CENTRAL *central, int idx, BOOL *ativo);
 
 void processarFimAlerta(CENTRAL *central, int idx);
 
