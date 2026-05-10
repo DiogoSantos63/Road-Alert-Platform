@@ -11,8 +11,6 @@
 #include "Utils.h"
 
 // TODO: 
-// - validar input do comando alerta (nao permitir duracoes negativas)
-// - permitir alerta com aspas
 // - ver se falta fazer lock de mutexes entre threads
 
 int _tmain(int argc, TCHAR *argv[]) {
@@ -597,8 +595,14 @@ BOOL cmdEnviarAlerta(CENTRAL *central, TCHAR *args) {
         _tprintf(STR_CMD_ALERTA_ERRO);
         return FALSE;
     }
-
-
+  
+    int duracaoInt = _ttoi(sDuracao);
+  
+    if (duracaoInt < 0) {
+        _tprintf(STR_ERRO_DURACAO);
+        return FALSE;
+    }
+  
   DWORD duracao = (DWORD)_ttoi(sDuracao);
   DWORD id = (DWORD)_ttoi(sId);
 
@@ -607,7 +611,7 @@ BOOL cmdEnviarAlerta(CENTRAL *central, TCHAR *args) {
   alerta.duracao = duracao;
   _tcscpy_s(alerta.msg, TAM_MSG, msg);
 
-  WaitForSingleObject(central->hMutex, INFINITE);
+  LOCK(central->hMutex);
 
   for (int i = 0; i < MAX_PLACARES; i++) {
     if ((id == 0 || central->placares[i].id == id) && central->placares[i].ligado) {
@@ -619,10 +623,15 @@ BOOL cmdEnviarAlerta(CENTRAL *central, TCHAR *args) {
       // set dados da mensagem e acordar o WaitForMultipleObjects
       central->placares[i].msg_por_enviar = TRUE;
       central->placares[i].tipo_msg_enviar = NOVO_ALERTA;
-      CancelIoEx(central->placares[i].hPipeInstance, &central->placares[i].olpInstance);
     }
   }
-  ReleaseMutex(central->hMutex);
+  UNLOCK(central->hMutex);
+
+  for (int i = 0; i < MAX_PLACARES; i++) {
+      if ((id == 0 || central->placares[i].id == id) && central->placares[i].ligado) {
+          CancelIoEx(central->placares[i].hPipeInstance, &central->placares[i].olpInstance);
+      }
+  }
 
   return TRUE;
 }

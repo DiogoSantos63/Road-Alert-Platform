@@ -46,6 +46,7 @@
 #define STR_PLACAR_DESCONECTADO _T("[ERRO] Placar %d desconectado inesperadamente...\n")
 #define STR_ERRO_MSG _T("[ERRO] Erro ao ler mensagem: %d\n")
 #define STR_PLACAR_NAO_ENCONTRADO _T("[ERRO] Placar não encontrado: %d\n")
+#define STR_ERRO_DURACAO _T("[ERRO] A duração não pode ser negativa\n")
 
 // Comandos
 #define STR_CMD_COMANDOS _T("Comandos disponíveis: \n\n")

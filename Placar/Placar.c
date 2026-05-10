@@ -81,10 +81,9 @@ BOOL escreverRegistry(TCHAR *nomePipe) {
 }
 
 BOOL initEventos(PLACAR *placar) {
-  placar->hEventoNotificar = CreateEvent(NULL, TRUE, FALSE, EVENTO_NOTIFICAR);
+  placar->hEventoNotificar = CreateEvent(NULL, TRUE, FALSE, NULL);
   placar->hEventoCancelar = CreateEvent(NULL, TRUE, FALSE, NULL);
   placar->hEventoTerminar = CreateEvent(NULL, TRUE, FALSE, NULL);
-
   if (placar->hEventoNotificar == NULL || placar->hEventoTerminar == NULL || placar->hEventoCancelar == NULL) {
     _tprintf(STR_ERRO_CRIAR_EVENTOS);
     return FALSE;
@@ -364,7 +363,7 @@ DWORD WINAPI threadEscutaCentral(LPVOID param) {
       BYTE tipo = buffer[0];
       switch(tipo) {
           case NOVO_ALERTA: {
-              LOG("Novo Alerta!");
+              //LOG("Novo Alerta!");
               MSG_ALERTA *alerta = (MSG_ALERTA*)buffer;
 
               // enviar confirmacao
@@ -373,7 +372,6 @@ DWORD WINAPI threadEscutaCentral(LPVOID param) {
               EnterCriticalSection(&placar->cs);
               memcpy(&placar->alertaAtual, alerta, sizeof(MSG_ALERTA));
               LeaveCriticalSection(&placar->cs);
-
               SetEvent(placar->hEventoNotificar);
               break;
           }
