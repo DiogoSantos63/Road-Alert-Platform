@@ -398,7 +398,9 @@ DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param) {
             desconectarPlacar(central, &central->placares[i]);
             continue;
           }
+
           central->placares[i].operacaoPendente = FALSE;
+          central->placares[i].bytesPedido = bytesLidos;
           processarLeituraConcluida(central, &central->placares[i]);
           break;
 
