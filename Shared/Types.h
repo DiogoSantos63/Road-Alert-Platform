@@ -33,9 +33,11 @@ typedef struct {
 
 // Central -> Monitor
 typedef struct {
-  DWORD identificador, duracao;
-  TCHAR msg[TAM_MSG];
-  BOOL desligar;
+	struct {
+		DWORD identificador, duracao;
+		TCHAR msg[140];
+	} placar[20];
+	BOOL desligar;
 } SHM_ALERTA;
 
 // Comandos

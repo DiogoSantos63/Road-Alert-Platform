@@ -30,6 +30,10 @@ int _tmain(int argc, TCHAR *argv[]) {
     ExitProcess(1);
   }
 
+  if (!initSharedMemory(&central)) {
+      ExitProcess(1);
+  }
+
   if (!initThreads(&central)) {
     terminarCentral(&central);
     ExitProcess(1);
@@ -151,17 +155,59 @@ BOOL criaConexao(PLACAR_INFO *placar) {
 }
 
 BOOL initThreads(CENTRAL *central) {
-  central->hThreads[0] = CreateThread(NULL, 0, threadComandos, central, 0, NULL);
-  central->hThreads[1] = CreateThread(NULL, 0, threadPlacaresOverlappedIO, central, 0, NULL);
+    central->hThreads[0] = CreateThread(NULL, 0, threadComandos, central, 0, NULL);
+    central->hThreads[1] = CreateThread(NULL, 0, threadPlacaresOverlappedIO, central, 0, NULL);
 
-  if (central->hThreads[0] == NULL || central->hThreads[1] == NULL) {
-    CloseHandle(central->hThreads[0]);
-    CloseHandle(central->hThreads[1]);
-    _tprintf(STR_ERRO_INIT_THREADS);
-    return FALSE;
-  }
+    if (central->hThreads[0] == NULL || central->hThreads[1] == NULL) {
+        CloseHandle(central->hThreads[0]);
+        CloseHandle(central->hThreads[1]);
+        _tprintf(STR_ERRO_INIT_THREADS);
+        return FALSE;
+    }
 
-  return TRUE;
+    return TRUE;
+}
+
+BOOL initSharedMemory(CENTRAL* central) {
+    central->hSharedMem = CreateFileMapping(
+        INVALID_HANDLE_VALUE,
+        NULL,
+        PAGE_READWRITE,
+        0,
+        sizeof(SHM_ALERTA),
+        NOME_SHM_ALERTA
+    );
+
+    if (central->hSharedMem == NULL) {
+        _tprintf(STR_ERROR_MEMORIA_PARTILHADA);
+        return FALSE;
+    }
+
+    central->pShm = (SHM_ALERTA*)MapViewOfFile(
+        central->hSharedMem,
+        FILE_MAP_ALL_ACCESS,
+        0, 0,
+        sizeof(SHM_ALERTA)
+    );
+
+    if (central->pShm == NULL) {
+        _tprintf(STR_ERROR_MAPEAR_MEMORIA);
+        CloseHandle(central->hSharedMem);
+        return FALSE;
+    }
+
+    ZeroMemory(central->pShm, sizeof(SHM_ALERTA));
+
+    central->hEventoMonitor = CreateEvent(NULL, FALSE, FALSE, NOME_EVENTO_MONITOR);
+
+    if (central->hEventoMonitor == NULL) {
+        _tprintf(STR_ERROR_EVENTO_MONITOR);
+        UnmapViewOfFile(central->pShm);
+        CloseHandle(central->hSharedMem);
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 COMANDO parsearComando(TCHAR *cmd) {
@@ -219,15 +265,15 @@ DWORD WINAPI threadComandos(LPVOID param) {
 
 void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar) {
   LOCK(central->hMutex);
+  BOOL notificarMonitor = FALSE;
   BYTE tipo = placar->bufferPedido[0];
+
+
   switch(tipo) {
     case LIGAR:
-     LOCK(central->hMutex);
     placar->id = central->proximoId++;
     placar->ligado = TRUE;
     central->numPlacares++;
-    UNLOCK(central->hMutex);
-
     placar->msg_por_enviar = TRUE;
     placar->tipo_msg_enviar = LIGAR;
     placar->estadoIO = ENVIA_RESPOSTA;
@@ -252,6 +298,8 @@ void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar) {
       _tprintf(STR_CENTRAL_RECEBEU_CMD, placar->bytesPedido, placar->id, FIM_ALERTA);
       _tprintf(STR_CENTRAL_PLACAR_TERMINOU, placar->id);
       central->mostrarPrompt = TRUE;
+      atualizarSharedMemory(central);
+      notificarMonitor = TRUE;
       break;
 
     case NOVO_ALERTA:
@@ -261,6 +309,8 @@ void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar) {
       _tprintf(STR_CENTRAL_RECEBEU_ALERTA, placar->bytesPedido, placar->id, NOVO_ALERTA);
       _tprintf(STR_CENTRAL_PLACAR_ALERTA_ATIVO, placar->id);
       central->mostrarPrompt = TRUE;
+      atualizarSharedMemory(central);
+      notificarMonitor = TRUE;
       break;
 
     case CANCELAR_ALERTA:
@@ -270,16 +320,24 @@ void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar) {
       _tprintf(STR_CENTRAL_RECEBEU_CMD, placar->bytesPedido, placar->id, CANCELAR_ALERTA);
       _tprintf(STR_CENTRAL_PLACAR_ALERTA_CANCELADO, placar->id);
       central->mostrarPrompt = TRUE;
+      atualizarSharedMemory(central);
+      notificarMonitor = TRUE;
       break;
     default:
       placar->msg_por_enviar = FALSE;
       placar->estadoIO = LE_PEDIDO;
   }
   UNLOCK(central->hMutex);
+
+  if (notificarMonitor) {
+        SetEvent(central->hEventoMonitor);
+  }
+ 
 }
 
 void processarEscritaConcluida(CENTRAL *central, PLACAR_INFO *placar) {
   //LOG("Mensagem enviada com sucesso");
+  BOOL notificarMonitor = FALSE;
 
   LOCK(central->hMutex);
   placar->msg_por_enviar = FALSE;
@@ -289,6 +347,8 @@ void processarEscritaConcluida(CENTRAL *central, PLACAR_INFO *placar) {
     case LIGAR:
       _tprintf(STR_CENTRAL_ENVIOU_CMD, placar->bytesResposta, placar->id, ATRIBUIR_IDENTIFICADOR);
       central->mostrarPrompt = TRUE;
+      atualizarSharedMemory(central);
+      notificarMonitor = TRUE;
       break;
 
     case ENCERRAR_PLATAFORMA:
@@ -311,9 +371,15 @@ void processarEscritaConcluida(CENTRAL *central, PLACAR_INFO *placar) {
       placar->temAlerta = FALSE;
       central->numPlacares--;
       desconectarPlacar(central, placar);
+      atualizarSharedMemory(central);
+      notificarMonitor = TRUE;
       break;
   }
   UNLOCK(central->hMutex);
+ 
+  if (notificarMonitor) {
+     SetEvent(central->hEventoMonitor);
+  }
 }
 
 DWORD WINAPI threadPlacaresOverlappedIO(LPVOID param) {
@@ -694,6 +760,23 @@ BOOL cmdListarPlacares(CENTRAL *central) {
   return TRUE;
 }
 
+void atualizarSharedMemory(CENTRAL* central) {
+    if (central->pShm == NULL) return;
+
+    ZeroMemory(central->pShm, sizeof(SHM_ALERTA));
+
+    for (int i = 0; i < MAX_PLACARES; i++) {
+        if (central->placares[i].ligado) {
+            central->pShm->placar[i].identificador = central->placares[i].id;
+            central->pShm->placar[i].duracao = central->placares[i].duracaoAlerta;
+            if (central->placares[i].temAlerta)
+                _tcscpy_s(central->pShm->placar[i].msg, TAM_MSG, central->placares[i].msgAlerta);
+        }
+    }
+
+    central->pShm->desligar = central->terminar;
+}
+
 BOOL cmdListarComandos() {
   _tprintf(STR_CENTRAL);
   _tprintf(STR_CMD_COMANDOS);
@@ -725,6 +808,7 @@ BOOL cmdEncerrarCentral(CENTRAL *central) {
   }
   ReleaseMutex(central->hMutex);
 
+  atualizarSharedMemory(central);
   return TRUE;
 }
 
@@ -745,4 +829,8 @@ void terminarCentral(CENTRAL *central) {
       CloseHandle(central->hEvents[i]);
     }
   }
+
+  if (central->pShm) UnmapViewOfFile(central->pShm);
+  if (central->hSharedMem) CloseHandle(central->hSharedMem);
+  if (central->hEventoMonitor) CloseHandle(central->hEventoMonitor);
 }

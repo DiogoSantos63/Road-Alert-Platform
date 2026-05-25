@@ -38,6 +38,9 @@
 #define STR_CMD_CANCELAR_ERRO _T("[ERRO] Uso: cancelar <msg> <duracao> [id]\n")
 #define STR_ERRO_CONNECT_PIPE _T("[ERRO] Nao foi possivel ligar ao PIPE\n")
 #define STR_ERRO_DURACAO _T("[ERRO] A duracao nao pode ser negativa\n")
+#define STR_ERROR_MEMORIA_PARTILHADA _T("\n[ERRO] Erro ao criar memoria partilhada\n")
+#define STR_ERROR_MAPEAR_MEMORIA _T("\n[ERRO] Erro ao mapear memoria partilhada\n")
+#define STR_ERROR_EVENTO_MONITOR _T("\n[ERRO] Erro ao criar evento monitor\n")
 
 // Comandos
 #define STR_CMD_COMANDOS _T("Comandos disponiveis: \n\n")

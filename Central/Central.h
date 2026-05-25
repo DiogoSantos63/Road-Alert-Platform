@@ -43,6 +43,10 @@ typedef struct {
   HANDLE hMutex;
   BOOL terminar;
   BOOL mostrarPrompt;
+
+  HANDLE hSharedMem;      // handle da memória partilhada
+  SHM_ALERTA* pShm;       // ponteiro para a memória partilhada
+  HANDLE hEventoMonitor;
 } CENTRAL;
 
 typedef struct {
@@ -55,6 +59,8 @@ BOOL validarArgumentos(CENTRAL *central, int argc, TCHAR *argv[]);
 BOOL initCentral(CENTRAL *central);
 
 BOOL initThreads(CENTRAL *central);
+
+BOOL initSharedMemory(CENTRAL* central);
 
 COMANDO parsearComando(TCHAR *cmd);
 
@@ -77,6 +83,8 @@ BOOL cmdListarPlacares(CENTRAL *central);
 BOOL cmdListarComandos();
 
 BOOL cmdEncerrarCentral(CENTRAL *central);
+
+void atualizarSharedMemory(CENTRAL* central);
 
 void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar);
 

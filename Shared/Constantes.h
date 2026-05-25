@@ -25,4 +25,22 @@
 
 #define THREADS_CENTRAL 2
 
+#define NOME_SHM_ALERTA _T("SHM_TrabSO2_Alertas")
+
+#define NOME_EVENTO_MONITOR _T("EVT_TrabSO2_Monitor")
+
+#define IDR_MENU 101
+
+#define IDM_CONFIGURACAO 201
+
+#define IDM_ACERCA 202
+
+#define IDM_SAIR 203
+
+#define IDD_CONFIGURACAO 301
+
+#define IDD_ACERCA 302
+
+#define IDC_MAX_ALERTAS 401
+
 #endif
