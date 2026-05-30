@@ -130,7 +130,6 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="Monitor.h" />
     <ClInclude Include="Resource.h" />
-    <ClInclude Include="Resources.h" />
     <ClInclude Include="Strings.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>

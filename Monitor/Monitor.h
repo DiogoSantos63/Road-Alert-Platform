@@ -3,6 +3,10 @@
 
 #include "resource.h"
 
+extern WCHAR nomeSHM[256];
+
+extern WCHAR nomeEvento[256];
+
 ATOM registarClasse(HINSTANCE hInstance);
 
 BOOL initJanela(HINSTANCE hInstance, int nCmdShow);

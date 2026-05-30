@@ -198,7 +198,7 @@ BOOL initSharedMemory(CENTRAL* central) {
 
     ZeroMemory(central->pShm, sizeof(SHM_ALERTA));
 
-    central->hEventoMonitor = CreateEvent(NULL, FALSE, FALSE, NOME_EVENTO_MONITOR);
+    central->hEventoMonitor = CreateEvent(NULL, TRUE, FALSE, NOME_EVENTO_MONITOR);
 
     if (central->hEventoMonitor == NULL) {
         _tprintf(STR_ERROR_EVENTO_MONITOR);
@@ -331,6 +331,8 @@ void processarLeituraConcluida(CENTRAL *central, PLACAR_INFO *placar) {
 
   if (notificarMonitor) {
         SetEvent(central->hEventoMonitor);
+        Sleep(50);
+        ResetEvent(central->hEventoMonitor);
   }
  
 }
@@ -379,6 +381,8 @@ void processarEscritaConcluida(CENTRAL *central, PLACAR_INFO *placar) {
  
   if (notificarMonitor) {
      SetEvent(central->hEventoMonitor);
+     Sleep(50);                              
+     ResetEvent(central->hEventoMonitor);
   }
 }
 
@@ -809,6 +813,7 @@ BOOL cmdEncerrarCentral(CENTRAL *central) {
   ReleaseMutex(central->hMutex);
 
   atualizarSharedMemory(central);
+  SetEvent(central->hEventoMonitor);
   return TRUE;
 }
 

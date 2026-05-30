@@ -5,6 +5,8 @@
 #define IDI_MONITOR             107
 #define IDI_SMALL               108
 #define IDC_MONITOR             109
+#define IDC_NOME_SHM    402
+#define IDC_NOME_EVENTO 403
 
 // Menu
 #define IDR_MENU                101

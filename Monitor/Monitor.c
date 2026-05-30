@@ -16,6 +16,8 @@ SHM_ALERTA* pShm = NULL;
 HANDLE hEventoMonitor = NULL;
 HANDLE hThreadMonitor = NULL;
 HWND hWndPrincipal = NULL;
+WCHAR nomeSHM[256] = NOME_SHM_ALERTA;
+WCHAR nomeEvento[256] = NOME_EVENTO_MONITOR;
 
 int maxAlertas = 5;
 int paginaAtual = 0;
@@ -68,13 +70,14 @@ BOOL initJanela(HINSTANCE hInstance, int nCmdShow) {
 
     if (!hWndPrincipal) return FALSE;
 
+
     ShowWindow(hWndPrincipal, nCmdShow);
     UpdateWindow(hWndPrincipal);
     return TRUE;
 }
 
 BOOL ligarSharedMemory() {
-    hSharedMem = OpenFileMapping(FILE_MAP_READ, FALSE, NOME_SHM_ALERTA);
+    hSharedMem = OpenFileMapping(FILE_MAP_READ, FALSE, nomeSHM);
     if (hSharedMem == NULL) {
         MessageBox(NULL, STR_ERRO_MEMORIA_PARTILHADA, STR_ERRO, MB_ICONERROR);
         return FALSE;
@@ -87,7 +90,7 @@ BOOL ligarSharedMemory() {
         return FALSE;
     }
 
-    hEventoMonitor = OpenEvent(SYNCHRONIZE, FALSE, NOME_EVENTO_MONITOR);
+    hEventoMonitor = OpenEvent(SYNCHRONIZE, FALSE, nomeEvento);
     if (hEventoMonitor == NULL) {
         UnmapViewOfFile(pShm);
         CloseHandle(hSharedMem);
@@ -109,6 +112,7 @@ DWORD WINAPI threadEscutaCentral(LPVOID param) {
         }
 
         InvalidateRect(hWndPrincipal, NULL, TRUE);
+        UpdateWindow(hWndPrincipal);  
     }
     return 0;
 }
@@ -144,16 +148,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_COMMAND: {
         int wmId = LOWORD(wParam);
         switch (wmId) {
-        case IDM_CONFIGURACAO:
+        case IDM_CONFIGURACAO: {
             DialogBox(hInst, MAKEINTRESOURCE(IDD_CONFIGURACAO), hWnd, DlgConfiguracaoProc);
-            InvalidateRect(hWnd, NULL, TRUE);  
+
+            if (hThreadMonitor) {
+                CloseHandle(hThreadMonitor);
+                hThreadMonitor = NULL;
+            }
+
+            if (pShm) { UnmapViewOfFile(pShm);       pShm = NULL; }
+            if (hSharedMem) { CloseHandle(hSharedMem);     hSharedMem = NULL; }
+            if (hEventoMonitor) { CloseHandle(hEventoMonitor); hEventoMonitor = NULL; }
+
+            if (ligarSharedMemory()) {
+                hThreadMonitor = CreateThread(NULL, 0, threadEscutaCentral, NULL, 0, NULL);
+            }
+
+            InvalidateRect(hWnd, NULL, TRUE);
             break;
+        }
         case IDM_ACERCA:
-           
-            MessageBox(hWnd,
-                STR_ACERCA_INFO,
-                STR_ACERCA_TITULO,
-                MB_OK | MB_ICONINFORMATION);
+            MessageBox(hWnd, STR_ACERCA_INFO, STR_ACERCA_TITULO, MB_OK | MB_ICONINFORMATION);
             break;
         case IDM_SAIR:
             DestroyWindow(hWnd);
@@ -162,9 +177,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     }
 
+    case WM_ERASEBKGND:
+        return 1;
+
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
+
+        RECT rect;
+        GetClientRect(hWnd, &rect);
+        FillRect(hdc, &rect, (HBRUSH)(COLOR_WINDOW + 1));
+
 
         if (pShm) {
             int y = 10;
@@ -192,7 +215,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
             WCHAR pagina[50];
             wsprintf(pagina, STR_INFO_PAGINA, paginaAtual + 1);
-            TextOut(hdc, 10, 450, pagina, lstrlen(pagina));
+            TextOut(hdc, 10, rect.bottom - 30, pagina, lstrlen(pagina));
 
         }
         else {
@@ -228,10 +251,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
 INT_PTR CALLBACK DlgConfiguracaoProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
+
     case WM_INITDIALOG: {
         WCHAR buf[10];
-        wsprintf(buf, _T("%d"), maxAlertas);  
+        wsprintf(buf, _T("%d"), maxAlertas);
         SetDlgItemText(hDlg, IDC_MAX_ALERTAS, buf);
+        SetDlgItemText(hDlg, IDC_NOME_SHM, nomeSHM);
+        SetDlgItemText(hDlg, IDC_NOME_EVENTO, nomeEvento);
         return TRUE;
     }
     case WM_COMMAND:
@@ -240,11 +266,16 @@ INT_PTR CALLBACK DlgConfiguracaoProc(HWND hDlg, UINT message, WPARAM wParam, LPA
             GetDlgItemText(hDlg, IDC_MAX_ALERTAS, buf, 10);
             int val = _wtoi(buf);
             if (val > 0) maxAlertas = val;
+            GetDlgItemText(hDlg, IDC_NOME_SHM, nomeSHM, 256);
+            GetDlgItemText(hDlg, IDC_NOME_EVENTO, nomeEvento, 256);
             EndDialog(hDlg, IDOK);
         }
-        else if (LOWORD(wParam) == IDCANCEL) {
+        else if (LOWORD(wParam) == IDCANCEL) { 
             EndDialog(hDlg, IDCANCEL);
         }
+        break;
+    case WM_CLOSE:
+        EndDialog(hDlg, IDCANCEL);
         break;
     }
     return FALSE;
